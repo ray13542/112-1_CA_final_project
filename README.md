@@ -1,8 +1,8 @@
 # CA_final_project
 Spec: 
-    ¡»All inputs are synchronized with the negative edge clock.
-    ¡»All outputs should be synchronized at clock rising edge.
-    ¡»You should reset all your outputs when i_rst_n is low.
+    â—†All inputs are synchronized with the negative edge clock.
+    â—†All outputs should be synchronized at clock rising edge.
+    â—†You should reset all your outputs when i_rst_n is low.
 Todo:
     *Submodule
     1. ALU
@@ -11,6 +11,7 @@ Todo:
     2. Control unit
         (i: opcode o: control signals)
         input opcode to determine which control signal need to set
+    3.  adder for branch
     
     *always block
     1. Intruction fetch
@@ -21,6 +22,6 @@ Todo:
     2. nextPC <= PC+4
 
 Q:
-    load store¦³¨S¦³­nsigned extention?
-    Mux«ç»ò©ñ?
-    branch©ÎALU control¬O§Ë¤@­Óalways block¶Ü?
+    load storeæœ‰æ²’æœ‰è¦signed extention?
+    Muxæ€Žéº¼æ”¾? assign wire + (control signal) ? : ;
+    branchæˆ–ALU controlæ˜¯å¼„ä¸€å€‹always blockå—Ž?
