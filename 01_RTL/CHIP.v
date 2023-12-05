@@ -135,7 +135,6 @@ module ALU(in1, in2, ALUctrl, result, zero);
     reg [DATA_W-1 : 0] result_reg;
     reg zero_reg;
 
-
     parameter ADD  = 3'd0;
     parameter SUB  = 3'd1;
     parameter AND  = 3'd2;
@@ -175,13 +174,112 @@ module ALU(in1, in2, ALUctrl, result, zero);
             SLL: result_reg[31:0] = in1 << in2;
         endcase
     end
-
 endmodule
 
+//Q:MUL還需不需要傳ALUctrl?
 module MULDIV_unit(
-    // TODO: port declaration
+    result, o_done, i_clk, i_valid, i_A, i_B, ALUctrl
     );
     // Todo: HW2
+    parameter DATA_W = 32;
+    input  i_clk, i_valid;
+    input  [DATA_W - 1 : 0]     i_A;    // input operand A
+    input  [DATA_W - 1 : 0]     i_B;    // input operand B
+    input  [         2 : 0]     ALUctrl; // instruction
+    output [DATA_W - 1 : 0]     result; // output value
+    output                      o_done; // output valid signal
+//Parameter
+    //ALUctrl
+    parameter MUL  = 3'd7;
+    parameter DIV  = 3'd8;
+    //state
+    parameter S_IDLE           = 2'd0;
+    parameter S_MULTI_CYCLE_OP = 2'd1;
+
+    reg  [         1: 0] state, state_nxt;
+    reg  [  DATA_W-1: 0] operand_a, operand_a_nxt;
+    reg  [  DATA_W-1: 0] operand_b, operand_b_nxt;
+    reg  [         2: 0] inst, inst_nxt;
+    reg  [         5: 0] counter;
+    reg  [  2*DATA_W: 0] result_reg;
+    reg  o_done_reg;
+
+    assign result[DATA_W-1:0] = result_reg[DATA_W-1:0];
+    assign o_done = o_done_reg;
+
+    always @(*) begin
+        if (i_valid) begin
+            operand_a_nxt = i_A;
+            operand_b_nxt = i_B;
+            inst_nxt      = ALUctrl;
+        end
+        else begin
+            operand_a_nxt = operand_a;
+            operand_b_nxt = operand_b;
+            inst_nxt      = inst;
+        end
+    end
+    //FSM
+    always @(*) begin
+        case(state)
+            S_IDLE           : begin
+                if(!i_valid) state_nxt <= S_IDLE;
+                else state_nxt <= (ALUctrl < 3'd7) ? S_ONE_CYCLE_OP : S_MULTI_CYCLE_OP;
+            end
+            S_MULTI_CYCLE_OP : state_nxt <= (counter == 32) ? S_IDLE : state;
+            default : state_nxt <= state;
+        endcase
+    end
+    //counter
+    always @(negedge i_clk or negedge i_valid) begin
+        if(~i_valid) counter <= counter + 1;
+        else counter <= 0;
+    end
+    //MUL
+    always @(negedge i_clk) begin
+        if (i_valid) result_reg = i_A;
+        if (state == S_MULTI_CYCLE_OP) begin
+            case (ALUctrl)
+                MUL:begin
+                    if(counter >= 0)begin
+                        result_reg = (result_reg[0]) ? {result_reg[64:32] + operand_b, result_reg[31:0]}: result_reg;
+                        result_reg = result_reg >> 1;
+                    end
+                    else result_reg = 0;
+                end
+                DIV: begin
+                    if(counter >= 0)begin
+                        result_reg = result_reg << 1;
+                        result_reg = (result_reg[63:32] >= operand_b) ? {result_reg[64:32] - operand_b, result_reg[31:0]}+1'b1: result_reg;
+                    end
+                    else result_reg = 0;
+                end
+                default: result_reg = 0;
+            endcase
+        end
+    end
+    //o_done signal
+    always @(posedge i_clk) begin
+        case (state)
+            S_MULTI_CYCLE_OP : o_done_reg <= (counter == 32)? 1: 0;
+            default: o_done_reg <= 0;
+        endcase
+    end
+    //Sequential always block
+    always @(posedge i_clk or negedge i_rst_n) begin
+        if (!i_rst_n) begin
+            state       <= S_IDLE;
+            operand_a   <= 0;
+            operand_b   <= 0;
+            inst        <= 0;
+        end
+        else begin
+            state       <= state_nxt;
+            operand_a   <= operand_a_nxt;
+            operand_b   <= operand_b_nxt;
+            inst        <= inst_nxt;
+        end
+    end
 endmodule
 
 module Cache#(

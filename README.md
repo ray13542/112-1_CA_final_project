@@ -11,7 +11,17 @@ Todo:
     2. Control unit
         (i: opcode o: control signals)
         input opcode to determine which control signal need to set
-    3.  adder for branch
+    3. Adder for branch
+
+    4. PC
+
+    5. Muldiv
+
+    6. Memory
+
+    7. Write Back
+
+    8. Imediate Generation
     
     *always block
     1. Intruction fetch
@@ -19,9 +29,12 @@ Todo:
         pass PC address
         return i_IMEM_data(instruction)
 
-    2. nextPC <= PC+4
+    2. PC-FSM
+        PC+4 or PC(stall for MUL) or Branch
+    
+    
 
 Q:
-    load store有沒有要signed extention?
-    Mux怎麼放? assign wire + (control signal) ? : ;
-    branch或ALU control是弄一個always block嗎?
+    load store有沒有要signed extention? A:有 把Instruction某部分擷取成32bit
+    Mux怎麼放? A: 在main module裡，assign wire XXX = (control signal) ? : ;
+    MUL還需不需要傳ALUctrl? 還是直接輸入i_valid代表要乘法就好?
