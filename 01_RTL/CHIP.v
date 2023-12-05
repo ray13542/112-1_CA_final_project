@@ -123,6 +123,61 @@ module Reg_file(i_clk, i_rst_n, wen, rs1, rs2, rd, wdata, rdata1, rdata2);
     end
 endmodule
 
+module ALU(in1, in2, ALUctrl, result, zero);
+    parameter DATA_W = 32;
+    input  [DATA_W-1:0] in1; 
+    input  [DATA_W-1:0] in2;
+    input  [2:0]        ALUctrl;
+    output [DATA_W-1:0] result;
+    output              zero;
+
+    wire signed [DATA_W-1: 0] signed_in1, signed_in2;
+    reg [DATA_W-1 : 0] result_reg;
+    reg zero_reg;
+
+
+    parameter ADD  = 3'd0;
+    parameter SUB  = 3'd1;
+    parameter AND  = 3'd2;
+    parameter XOR  = 3'd3;
+    parameter SLT  = 3'd4;
+    parameter SRA  = 3'd5;
+    parameter SLL  = 3'd6;
+
+    assign signed_in1 = in1;
+    assign signed_in2 = in2;
+    assign result = result_reg;
+
+    always @(*) begin
+        case (ALUctrl)
+            ADD: begin
+                result_reg[31:0] = in1 + in2;
+                //overflow
+                if (in1[31] == in2[31]) begin
+                    if (~in1[31] && result_reg[31]) result_reg[31:0] = {1'b0,{31{1'b1}}};
+                    else if (in1[31] && ~result_reg[31]) result_reg[31:0] = {1'b1,{31{1'b0}}};
+                end
+            end
+            SUB: begin
+                result_reg[31:0] = signed_in1 - signed_in2;
+                //overflow
+                if (in1[31] != in2[31]) begin
+                    if (~in1[31] && in2[31] && result_reg[31]) result_reg[31:0] = {1'b0,{31{1'b1}}};
+                    else if (in1[31] && ~in2[31] && ~result_reg[31]) result_reg[31:0] = {1'b1,{31{1'b0}}};
+                end
+                //zero for beq
+                if(result_reg == 32'b0) zero = 1'b1;
+            end
+            AND: result_reg[31:0] = in1 & in2;
+            XOR: result_reg[31:0] = in1 ^ in2;
+            SLT: result_reg[31:0] = (signed_in1 < signed_in2)? 1:0;
+            SRA: result_reg[31:0] = {{32{in1[31]}},in1} >> in2;
+            SLL: result_reg[31:0] = in1 << in2;
+        endcase
+    end
+
+endmodule
+
 module MULDIV_unit(
     // TODO: port declaration
     );
