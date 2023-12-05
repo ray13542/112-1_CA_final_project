@@ -29,6 +29,16 @@ module CHIP #(                                                                  
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
 
     // TODO: any declaration
+    // func7 opcode
+    parameter R_type = 7'b0110011; // add, sub, and, xor, mul
+    parameter I_type = 7'b0010011; // addi, slli, slti, srai
+    parameter auipc_type  = 7'b0010111; // auipc
+    parameter sw_type = 7'b0100011; // sw
+    parameter lw_type = 7'b0000011; // lw
+    parameter beq_type = 7'b1100011; // beq, bge, blt, bne
+    parameter jal_type = 7'b1101111; // jal
+    parameter jalr_type = 7'b1100111; // jalr
+    parameter ecall_type = 7'b1110011; // ecall
 
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
 // Wires and Registers
@@ -43,8 +53,11 @@ module CHIP #(                                                                  
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
 // Continuous Assignment
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
-
     // TODO: any wire assignment
+    wire [6:0] opcode;
+    wire [2:0] funct3;
+    wire [4:0] rs1, rs2, rd;
+    
 
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
 // Submoddules
@@ -68,7 +81,22 @@ module CHIP #(                                                                  
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
     
     // Todo: any combinational/sequential circuit
-
+    always@(*) begin
+        //
+        case(opcode)
+            R_type:
+            I_type:
+            // auipc_type:
+            // sw_type:
+            // lw_type:
+            // beq_type:
+            // jal_type:
+            //jalr_type:
+            ecall_type:
+        endcase
+    end
+                
+    
     always @(posedge i_clk or negedge i_rst_n) begin
         if (!i_rst_n) begin
             PC <= 32'h00010000; // Do not modify this value!!!
@@ -176,7 +204,7 @@ module ALU(in1, in2, ALUctrl, result, zero);
     end
 endmodule
 
-//Q:MUL�ٻݤ��ݭn��ALUctrl?
+//Q:MULÁÙ»Ý¤£»Ý­n¶ÇALUctrl?
 module MULDIV_unit(
     result, o_done, i_clk, i_valid, i_A, i_B, ALUctrl
     );
