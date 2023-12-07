@@ -114,7 +114,7 @@ module CHIP #(                                                                  
         endcase
     end
                 
-    // control  // reg ALUsrc,ALUop,regwrite,branch,memtoreg,memwrite;
+    // control  // reg IsBranch, Branch, MemRead, MemtoReg, MemWrite, ALUsrc, RegWrite;
     reg jal,jalr;
     always @(*) begin
         ALUsrc = 0;
@@ -147,6 +147,7 @@ module CHIP #(                                                                  
                 ALUsrc = 0;
                 RegWrite = 0;
                 ALUop = 2'b01;
+                Branch = 1;
             end
             jal_type: begin
                 ALUsrc = 1;
