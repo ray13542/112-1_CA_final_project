@@ -128,10 +128,12 @@ module CHIP #(                                                                  
             I_type: begin
                 ALUsrc = 1;
                 RegWrite = 1;
+                ALUop = 2'b11;
             end
             auipc_type: begin
                 ALUsrc = 1;
                 RegWrite = 1;
+                ALUop = 2'b0;
             end
             sw_type: begin
                 ALUsrc = 1;
@@ -152,10 +154,12 @@ module CHIP #(                                                                  
             jal_type: begin
                 ALUsrc = 1;
                 reg_write = 1;
+                ALUop = 2'b0;
             end
             jalr_type: begin
                 ALU_src = 1;
                 reg_write = 1;
+                ALUop = 2'b0;
             end
         endcase
     end
