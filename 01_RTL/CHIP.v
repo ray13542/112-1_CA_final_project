@@ -146,6 +146,7 @@ module CHIP #(                                                                  
             beq_type: begin
                 ALUsrc = 0;
                 RegWrite = 0;
+                ALUop = 2'b01;
             end
             jal_type: begin
                 ALUsrc = 1;
