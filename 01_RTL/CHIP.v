@@ -46,6 +46,8 @@ module CHIP #(                                                                  
     
     // TODO: any declaration
         reg [BIT_W-1:0] PC, next_PC;
+        reg [BIT_W-1:0] PCadd4, PCbranch;
+
         wire mem_cen, mem_wen;
         wire [BIT_W-1:0] mem_addr, mem_wdata, mem_rdata;
         wire mem_stall;
@@ -53,31 +55,43 @@ module CHIP #(                                                                  
         wire [2:0] funct3;
         wire [4:0] rs1, rs2, rd;
 
+        wire [BIT_W-1:0] reg_rdata_1, reg_rdata_2;
+        wire [BIT_W-1:0] aluresult;
+        //control signal
+        wire zero;
+        wire IsBranch, Branch, MemRead, MemtoReg, MemWrite, ALUsrc, RegWrite;
+        wire [1:0] ALUop;
+        wire [3:0] ALUctrl;
+        
+
+
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
 // Continuous Assignment
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
     // TODO: any wire assignment
-        assign opcode = i_IMEM_data[6:0];
-        assign funct3 = i_IMEM_data[14:12];
-        assign rs2 = i_IMEM_data[24:20];
-        assign rs1 = i_IMEM_data[19:15];
-        assign rd = i_IMEM_data[11:7];
-        
+    assign PC = o_IMEM_addr;
+    assign opcode = i_IMEM_data[6:0];
+    assign funct3 = i_IMEM_data[14:12];
+    assign rs2 = i_IMEM_data[24:20];
+    assign rs1 = i_IMEM_data[19:15];
+    assign rd = i_IMEM_data[11:7];
+    assign Branch = IsBranch & zero;
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
 // Submoddules
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
-
+    ALU alu(.in1(reg_rdata_1), .in2(reg_rdata_2), .ALUctrl(ALUctrl), .result(aluresult), zero.(zero));
+    MULDIV_unit mul(.result(aluresult), .o_done(), .i_clk(i_clk), .i_valid(), .i_A(reg_rdata_1), .i_B(reg_rdata_2), .ALUctrl(ALUctrl));
     // TODO: Reg_file wire connection
     Reg_file reg0(               
         .i_clk  (i_clk),             
         .i_rst_n(i_rst_n),         
-        .wen    (),          
-        .rs1    (),                
-        .rs2    (),                
-        .rd     (),                 
+        .wen    (RegWrite),          
+        .rs1    (rs1),                
+        .rs2    (rs2),                
+        .rd     (rd),                 
         .wdata  (),             
-        .rdata1 (),           
-        .rdata2 ()
+        .rdata1 (reg_rdata_1),           
+        .rdata2 (reg_rdata_2)
     );
 
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -100,7 +114,12 @@ module CHIP #(                                                                  
         endcase
     end
                 
-    
+    always @(posedge i_clk) begin
+        PCadd4 = PC + 4;
+        PCbranch = (imm << 1) + PC;
+        next_PC = ()? PCbranch: PCadd4;
+    end
+
     always @(posedge i_clk or negedge i_rst_n) begin
         if (!i_rst_n) begin
             PC <= 32'h00010000; // Do not modify this value!!!
@@ -154,7 +173,31 @@ module Reg_file(i_clk, i_rst_n, wen, rs1, rs2, rd, wdata, rdata1, rdata2);
         end       
     end
 endmodule
+module ALUcontrol(ALUop, ALUctrl, funct7, funct3);
+    input [1:0] ALUop;
+    input [2:0] funct3;
+    input funct7;
+    output [2:0] ALUctrl;
 
+    parameter ADD  = 3'd0;
+    parameter SUB  = 3'd1;
+    parameter AND  = 3'd2;
+    parameter XOR  = 3'd3;
+    parameter SLT  = 3'd4;
+    parameter SRA  = 3'd5;
+    parameter SLL  = 3'd6;
+    case (ALUop)
+        00: ALUctrl = ADD;
+        01: ALUctrl = SUB;
+        10: case (funct7)
+            1: ALUctrl = (funct3 == 3'b0) ? SUB:SRA;
+            0:
+            default: 
+            endcase
+        default: 
+    endcase
+
+endmodule
 module ALU(in1, in2, ALUctrl, result, zero);
     parameter DATA_W = 32;
     input  [DATA_W-1:0] in1; 
@@ -208,7 +251,7 @@ module ALU(in1, in2, ALUctrl, result, zero);
     end
 endmodule
 
-//Q:MULÁÙ»Ý¤£»Ý­n¶ÇALUctrl?
+
 module MULDIV_unit(
     result, o_done, i_clk, i_valid, i_A, i_B, ALUctrl
     );
