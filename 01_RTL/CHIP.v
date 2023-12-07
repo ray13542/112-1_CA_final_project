@@ -45,23 +45,22 @@ module CHIP #(                                                                  
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
     
     // TODO: any declaration
-        reg [BIT_W-1:0] PC, next_PC;
-        reg [BIT_W-1:0] PCadd4, PCbranch;
+    reg [BIT_W-1:0] PC, next_PC;
+    reg [BIT_W-1:0] PCadd4, PCbranch;
 
-        wire mem_cen, mem_wen;
-        wire [BIT_W-1:0] mem_addr, mem_wdata, mem_rdata;
-        wire mem_stall;
-        wire [6:0] opcode;
-        wire [2:0] funct3;
-        wire [4:0] rs1, rs2, rd;
+    wire mem_cen, mem_wen;
+    wire [BIT_W-1:0] mem_addr, mem_wdata, mem_rdata;
+    wire mem_stall;
+    wire [6:0] opcode;
+    wire [2:0] funct3;
+    wire [4:0] rs1, rs2, rd;
 
-        wire [BIT_W-1:0] reg_rdata_1, reg_rdata_2;
-        wire [BIT_W-1:0] aluresult;
-        //control signal
-        wire zero;
-        wire IsBranch, Branch, MemRead, MemtoReg, MemWrite, ALUsrc, RegWrite;
-        wire [1:0] ALUop;
-        wire [3:0] ALUctrl;
+    wire [BIT_W-1:0] reg_rdata_1, reg_rdata_2, alu_in1, alu_in2, alu_result;
+    //control signal
+    wire zero;
+    wire goBranch, Branch, MemRead, MemtoReg, MemWrite, ALUsrc, RegWrite;
+    wire [1:0] ALUop;
+    wire [3:0] ALUctrl;
         
 
 
@@ -75,12 +74,15 @@ module CHIP #(                                                                  
     assign rs2 = i_IMEM_data[24:20];
     assign rs1 = i_IMEM_data[19:15];
     assign rd = i_IMEM_data[11:7];
-    assign Branch = IsBranch & zero;
+    assign goBranch = Branch & zero;
+    assign alu_in1 = reg_rdata_1;
+    assign alu_in2 = (ALUsrc)? imm : reg_rdata_2;
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
 // Submoddules
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
-    ALU alu(.in1(reg_rdata_1), .in2(reg_rdata_2), .ALUctrl(ALUctrl), .result(aluresult), zero.(zero));
-    MULDIV_unit mul(.result(aluresult), .o_done(), .i_clk(i_clk), .i_valid(), .i_A(reg_rdata_1), .i_B(reg_rdata_2), .ALUctrl(ALUctrl));
+    ALU alu(.in1(alu_in1), .in2(alu_in2), .ALUctrl(ALUctrl), .result(alu_result), zero.(zero));
+    MULDIV_unit mul(.result(aluresult), .o_done(), .i_clk(i_clk), .i_valid(), .i_A(alu_in1), .i_B(alu_in2), .ALUctrl(ALUctrl));
+    ALUcontrol alucontrol(.ALUop(ALUop), .ALUctrl(ALUctrl), .funct7(), .funct3(funct3));
     // TODO: Reg_file wire connection
     Reg_file reg0(               
         .i_clk  (i_clk),             
@@ -215,8 +217,9 @@ module CHIP #(                                                                  
                 imm = {{20{i_IMEM_data[31]}}, i_IMEM_data[31:20]};
         endcase
     end
-    // still need to do : When ALUsrc = 1, imm passes to ALU ; When ALUsrc = 0, Read_data_2 passes to ALU
+    // OK -> still need to do : When ALUsrc = 1, imm passes to ALU ; When ALUsrc = 0, Read_data_2 passes to ALU
                 
+    
     always @(posedge i_clk) begin
         PCadd4 = PC + 4;
         PCbranch = (imm << 1) + PC;
