@@ -123,6 +123,7 @@ module CHIP #(                                                                  
             R_type: begin
                 ALUsrc = 0;
                 RegWrite = 1;
+                ALUop = 2'b10;
             end
             I_type: begin
                 ALUsrc = 1;
@@ -135,10 +136,12 @@ module CHIP #(                                                                  
             sw_type: begin
                 ALUsrc = 1;
                 RegWrite = 0;
+                ALUop = 2'b0;
             end
             lw_type: begin
                 ALUsrc = 1;
                 RegWrite = 1;
+                ALUop = 2'b0;
             end
             beq_type: begin
                 ALUsrc = 0;
