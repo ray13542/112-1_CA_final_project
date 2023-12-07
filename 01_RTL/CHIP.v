@@ -189,9 +189,13 @@ module ALUcontrol(ALUop, ALUctrl, funct7, funct3);
     case (ALUop)
         00: ALUctrl = ADD;
         01: ALUctrl = SUB;
-        10: case (funct7)
-            1: ALUctrl = (funct3 == 3'b0) ? SUB:SRA;
-            0:
+        10: case (funct3)
+            3'b000: ALUctrl = (funct7) ? SUB:ADD;
+            3'b001: ALUctrl = SLL;
+            3'b010: ALUctrl = SLT;
+            3'b100: ALUctrl = XOR;
+            3'b101: ALUctrl = SRA;
+            3'b111: ALUctrl = AND;
             default: 
             endcase
         default: 

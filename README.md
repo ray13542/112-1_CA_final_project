@@ -1,8 +1,11 @@
 # CA_final_project
 Spec: 
     ◆All inputs are synchronized with the negative edge clock.
+
     ◆All outputs should be synchronized at clock rising edge.
+
     ◆You should reset all your outputs when i_rst_n is low.
+
 Todo:
     *Submodule
     1. ALU
@@ -22,6 +25,10 @@ Todo:
     7. Write Back
 
     8. Imediate Generation
+
+    9.ALU control unit
+        input: ALUop(2bit) func3, func7
+        output: ALUctrl
     
     *always block
     1. Intruction fetch
@@ -36,5 +43,9 @@ Todo:
 
 Q:
     load store有沒有要signed extention? A:有 把Instruction某部分擷取成32bit
+
     Mux怎麼放? A: 在main module裡，assign wire XXX = (control signal) ? : ;
+
     MUL還需不需要傳ALUctrl? 還是直接輸入i_valid代表要乘法就好?
+
+    BEQ、BNE、BLT、BGE在ALU要做甚麼?
