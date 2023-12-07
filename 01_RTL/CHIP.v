@@ -99,70 +99,123 @@ module CHIP #(                                                                  
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
     
     // Todo: any combinational/sequential circuit
-    always@(*) begin
-        //
-        case(opcode)
-            R_type:
-            I_type:
-            // auipc_type:
-            // sw_type:
-            // lw_type:
-            // beq_type:
-            // jal_type:
-            //jalr_type:
-            ecall_type:
-        endcase
-    end
-                
-    // control  // reg IsBranch, Branch, MemRead, MemtoReg, MemWrite, ALUsrc, RegWrite;
+    
+    // Control 
+    // reg Branch, MemRead, MemtoReg, MemWrite, ALUsrc, RegWrite;
     reg jal,jalr;
     always @(*) begin
         ALUsrc = 0;
         RegWrite = 0;
+        Branch = 0;
+        MemtoReg = 0;
+        MemWrite = 0;
+        MemRead = 0;
+        jal = 0;
+        jalr = 0;
+        // 
         case(opcode)
             R_type: begin
                 ALUsrc = 0;
                 RegWrite = 1;
                 ALUop = 2'b10;
+                RegWrite = 1;
+                MemWrite = 0;
+                MemRead = 0;
+                MemtoReg = 0;
             end
-            I_type: begin
+            I_type: begin // addi, slli, slti, srai
                 ALUsrc = 1;
                 RegWrite = 1;
                 ALUop = 2'b11;
+                RegWrite = 1;
+                MemWrite = 0;
+                MemRead = 0;
+                MemtoReg = 0;
             end
             auipc_type: begin
                 ALUsrc = 1;
                 RegWrite = 1;
                 ALUop = 2'b0;
+                RegWrite = 1; // rd stores pc+imm
+                MemWrite = 0;
+                MemRead = 0;
+                MemtoReg = 0; //
             end
             sw_type: begin
                 ALUsrc = 1;
                 RegWrite = 0;
-                ALUop = 2'b0;
+                ALUop = 2'b0;  
+                RegWrite = 0;
+                MemWrite = 1;
+                MemRead = 0;
+                MemtoReg = 0;
             end
             lw_type: begin
                 ALUsrc = 1;
                 RegWrite = 1;
                 ALUop = 2'b0;
+                RegWrite = 1;
+                MemWrite = 0;
+                MemRead = 1;
+                MemtoReg = 1;
             end
             beq_type: begin
                 ALUsrc = 0;
                 RegWrite = 0;
                 ALUop = 2'b01;
-                Branch = 1;
+                Branch = 1; // branch
+                MemWrite = 0;
+                RegWrite = 0;
+                MemRead = 0;
+                MemtoReg = 0;
             end
             jal_type: begin
                 ALUsrc = 1;
                 reg_write = 1;
                 ALUop = 2'b0;
+                RegWrite = 1; // write pc+4 to rd
+                MemWrite = 0;
+                MemRead = 0;
+                MemtoReg = 0; 
             end
             jalr_type: begin
-                ALU_src = 1;
+                ALUsrc = 1;
                 reg_write = 1;
                 ALUop = 2'b0;
+                RegWrite = 1; // write pc+4 to rd
+                MemWrite = 0;
+                MemRead = 0;
+                MemtoReg = 0;
             end
         endcase
     end
+    
+    // ImmGen part
+    reg [31:0] imm;
+    always@(*) begin
+        imm = 0;
+        case(opcode)
+            I_type: begin // addi, slli, slti, srai
+                if(funct3 == 3'b001 || funct3 == 3'b101) // slli, srai are different 
+                    imm = {{27{i_IMEM_data[24]}}, i_IMEM_data[24:20]};
+                else // addi, slti
+                    imm = {{20{i_IMEM_data[31]}}, i_IMEM_data[31:20]}; // 12 bits imm, sign extension
+            end
+            auipc_type: 
+                imm = {i_IMEM_data[31:12], 12'b0};
+            sw_type: 
+                imm = {{20{i_IMEM_data[31]}}, i_IMEM_data[31:25], i_IMEM_data[11:7]};
+            lw_type: // lw is I-type
+                imm = {{20{i_IMEM_data[31]}}, i_IMEM_data[31:20]}; 
+            beq_type: 
+                imm = {{20{i_IMEM_data[31]}}, i_IMEM_data[7], i_IMEM_data[30:25], i_IMEM_data[11:8], 1'b0}; 
+            jal_type:
+                imm = {{12{i_IMEM_data[31]}}, i_IMEM_data[19:12], i_IMEM_data[20], i_IMEM_data[30:21], 1'b0};
+            jalr_type: // jalr is I-type
+                imm = {{20{i_IMEM_data[31]}}, i_IMEM_data[31:20]};
+        endcase
+    end
+    // still need to do : When ALUsrc = 1, imm passes to ALU ; When ALUsrc = 0, Read_data_2 passes to ALU
                 
     always @(posedge i_clk) begin
         PCadd4 = PC + 4;
