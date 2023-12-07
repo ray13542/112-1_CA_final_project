@@ -114,6 +114,47 @@ module CHIP #(                                                                  
         endcase
     end
                 
+    // control  // reg ALUsrc,ALUop,regwrite,branch,memtoreg,memwrite;
+    reg jal,jalr;
+    always @(*) begin
+        ALUsrc = 0;
+        RegWrite = 0;
+        case(opcode)
+            R_type: begin
+                ALUsrc = 0;
+                RegWrite = 1;
+            end
+            I_type: begin
+                ALUsrc = 1;
+                RegWrite = 1;
+            end
+            auipc_type: begin
+                ALUsrc = 1;
+                RegWrite = 1;
+            end
+            sw_type: begin
+                ALUsrc = 1;
+                RegWrite = 0;
+            end
+            lw_type: begin
+                ALUsrc = 1;
+                RegWrite = 1;
+            end
+            beq_type: begin
+                ALUsrc = 0;
+                RegWrite = 0;
+            end
+            jal_type: begin
+                ALUsrc = 1;
+                reg_write = 1;
+            end
+            jalr_type: begin
+                ALU_src = 1;
+                reg_write = 1;
+            end
+        endcase
+    end
+                
     always @(posedge i_clk) begin
         PCadd4 = PC + 4;
         PCbranch = (imm << 1) + PC;
