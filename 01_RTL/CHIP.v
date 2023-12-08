@@ -112,8 +112,8 @@ module CHIP #(                                                                  
         MemtoReg = 0;
         MemWrite = 0;
         MemRead = 0;
-        jal = 0;
-        jalr = 0;
+        gojal = 0;
+        gojalr = 0;
         // 
         case(opcode)
             R_type: begin
@@ -142,8 +142,7 @@ module CHIP #(                                                                  
             end
             sw_type: begin
                 ALUsrc = 1;
-                RegWrite = 0;
-                ALUop = 2'b0;
+                ALUop = 2'b0;  
                 RegWrite = 0;
                 MemWrite = 1;
                 MemRead = 0;
@@ -202,7 +201,7 @@ module CHIP #(                                                                  
                 imm = {{20{i_IMEM_data[31]}}, i_IMEM_data[31:25], i_IMEM_data[11:7]};
             lw_type: // lw is I-type
                 imm = {{20{i_IMEM_data[31]}}, i_IMEM_data[31:20]}; 
-            beq_type: 
+            B_type: 
                 imm = {{20{i_IMEM_data[31]}}, i_IMEM_data[7], i_IMEM_data[30:25], i_IMEM_data[11:8], 1'b0}; 
             jal_type:
                 imm = {{12{i_IMEM_data[31]}}, i_IMEM_data[19:12], i_IMEM_data[20], i_IMEM_data[30:21], 1'b0};
