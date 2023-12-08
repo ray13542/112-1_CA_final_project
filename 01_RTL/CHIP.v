@@ -110,7 +110,7 @@ module CHIP #(                                                                  
     
     // Control 
     // reg Branch, MemRead, MemtoReg, MemWrite, ALUsrc, RegWrite;
-    reg dojal, dojalr;
+    reg dojal, dojalr, auipc_ctrl;
     always @(*) begin
         ALUsrc = 0;
         RegWrite = 0;
@@ -144,7 +144,8 @@ module CHIP #(                                                                  
                 RegWrite = 1; // rd stores pc+imm
                 MemWrite = 0;
                 MemRead = 0;
-                MemtoReg = 0; //
+                MemtoReg = 0;
+                auipc_ctrl = 1;
             end
             sw_type: begin
                 ALUsrc = 1;
@@ -222,16 +223,23 @@ module CHIP #(                                                                  
     // deal with PC change
     always @(posedge i_clk) begin
         // PCadd4 = PC + 4;
-        if(Branch == 1) // B-type
+        if(i_DMEM_stall)
+            next_PC <= PC;
+        else if(IsMUL) begin // MUL
+            if(MULdone)
+                next_PC <= PC + 32'b100;
+            else
+                next_PC <= PC;
+        end
+        else if(Branch == 1) // B-type
             PCbranch = (imm << 1) + PC;
             next_PC <= (gobranch) ? ((imm << 1) + PC) : (PC + 32'b100); // goBranch = Branch & Zero
         else if(dojal == 1) // jal
             next_PC <= PC + imm; // PC + offset
-        else if(dojalr = 1)
+        else if(dojalr = 1) // jalr
             next_PC <= rs1 + imm; // set PC = rs1 + offset
         else
             next_PC <= PC + 32'b100;
-        // still need to do MUL, SW
     end
 
     always @(posedge i_clk or negedge i_rst_n) begin
