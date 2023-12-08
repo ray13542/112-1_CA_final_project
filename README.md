@@ -29,6 +29,8 @@ Todo:
     9.ALU control unit
         input: ALUop(2bit) func3, func7
         output: ALUctrl
+    10. jal : next_pc = pc + imm
+        jalr : next_pc = pc + result of alu
     
     *always block
     1. Intruction fetch
