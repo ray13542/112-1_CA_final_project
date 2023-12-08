@@ -14,12 +14,11 @@ Todo:
     2. Control unit
         (i: opcode o: control signals)
         input opcode to determine which control signal need to set
-    3. Adder for branch
 
     4. PC
 
     5. Muldiv
-
+        not done yet : How to do with i_valid
     6. Memory
         stall = 1 such that next_PC = PC
         rdata => Reg_W_data 
@@ -27,9 +26,6 @@ Todo:
         o_DMEM_wen = MemWrite & (~MemRead)
         o_DMEM_addr = ALU_result
         o_DMEM_wdata = reg_rdata_2
-
-
-
     7. Write Back
 
     8. Imediate Generation
@@ -37,9 +33,18 @@ Todo:
     9.ALU control unit
         input: ALUop(2bit) func3, func7
         output: ALUctrl
+
     10. jal : next_pc = pc + imm
         jalr : next_pc = rs1 + imm
+
     11. use ALU: R, I, B-type
+
+    12. Determine reg write data
+        jal, jalr:  wdata = PC + 4
+        store:      wdata = mem_rdata
+        auipc:      wdata = PC + {imm, 12'b0}
+
+
         
     
     *always block
@@ -49,7 +54,8 @@ Todo:
         return i_IMEM_data(instruction)
 
     2. PC-FSM
-        PC+4 or PC(stall for MUL) or Branch
+        PC+4 or PC(stall for MUL or MEM) or Branch
+        Adder for branch
     
     
 

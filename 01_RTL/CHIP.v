@@ -46,7 +46,7 @@ module CHIP #(                                                                  
     
     // TODO: any declaration
     reg [BIT_W-1:0] PC, next_PC;
-    reg [BIT_W-1:0] PCadd4, PCbranch;
+    reg go_Branch_reg;
 
     wire mem_cen, mem_wen;
     wire [BIT_W-1:0] mem_addr, mem_wdata, mem_rdata;
@@ -57,7 +57,7 @@ module CHIP #(                                                                  
 
     wire [BIT_W-1:0] reg_rdata_1, reg_rdata_2, reg_wdata, alu_in1, alu_in2, alu_result;
     //control signal
-    wire zero;
+    wire zero, lessthan;
     wire goBranch, Branch, MemRead, MemtoReg, MemWrite, ALUsrc, RegWrite, IsMUL, MULdone;
     wire [1:0] ALUop;
     wire [3:0] ALUctrl;
@@ -74,7 +74,7 @@ module CHIP #(                                                                  
     assign rs2 = i_IMEM_data[24:20];
     assign rs1 = i_IMEM_data[19:15];
     assign rd = i_IMEM_data[11:7];
-    assign goBranch = Branch & zero;
+    assign goBranch = go_Branch_reg;
     //assignment for alu
     assign alu_in1 = reg_rdata_1;
     assign alu_in2 = (ALUsrc)? imm : reg_rdata_2;
@@ -86,9 +86,10 @@ module CHIP #(                                                                  
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
 // Submoddules
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
-    ALU alu(.in1(alu_in1), .in2(alu_in2), .ALUctrl(ALUctrl), .result(alu_result), zero.(zero));
+    ALU alu(.in1(alu_in1), .in2(alu_in2), .ALUctrl(ALUctrl), .result(alu_result), zero.(zero), .lessthan(lessthan));
     MULDIV_unit mul(.result(aluresult), .o_done(MULdone), .i_clk(i_clk), .i_valid(IsMUL), .i_A(alu_in1), .i_B(alu_in2));
     ALUcontrol alucontrol(.ALUop(ALUop), .MUL(IsMUL), .ALUctrl(ALUctrl), .funct7(func7), .funct3(funct3));
+    RegWriteData regwd(.Isjal(dojal), .Isjalr(dojalr), .Isauipc(auipc_ctrl), .IsMemtoReg(MemtoReg), .reg_wdata(reg_wdata), .PC(PC), .imm(imm), .mem_rdata(i_DMEM_rdata));
     // TODO: Reg_file wire connection
     Reg_file reg0(               
         .i_clk  (i_clk),             
@@ -97,7 +98,7 @@ module CHIP #(                                                                  
         .rs1    (rs1),                
         .rs2    (rs2),                
         .rd     (rd),                 
-        .wdata  (i_DMEM_rdata),             
+        .wdata  (reg_wdata),             
         .rdata1 (reg_rdata_1),           
         .rdata2 (reg_rdata_2)
     );
@@ -218,8 +219,21 @@ module CHIP #(                                                                  
                 imm = {{20{i_IMEM_data[31]}}, i_IMEM_data[31:20]};
         endcase
     end
-    // OK -> still need to do : When ALUsrc = 1, imm passes to ALU ; When ALUsrc = 0, Read_data_2 passes to ALU
-                
+    //Determine when to goBranch
+    always @(*) begin
+        if (Branch) begin
+            if(isbeq && zero)
+                goBranch_reg = 1'b1;
+            else if(isbne && ~zero)
+                goBranch_reg = 1'b1;
+            else if(isbge && ~lessthan)
+                goBranch_reg = 1'b1;
+            else if(isblt && lessthan)
+                goBranch_reg = 1'b1;
+            else 
+                goBranch_reg = 1'b0;
+        end
+    end
     // deal with PC change
     always @(posedge i_clk) begin
         // PCadd4 = PC + 4;
@@ -233,7 +247,7 @@ module CHIP #(                                                                  
         end
         else if(Branch == 1) // B-type
             PCbranch = (imm << 1) + PC;
-            next_PC <= (gobranch) ? ((imm << 1) + PC) : (PC + 32'b100); // goBranch = Branch & Zero
+            next_PC <= (goBranch) ? ((imm << 1) + PC) : (PC + 32'b100); // goBranch = Branch & Zero
         else if(dojal == 1) // jal
             next_PC <= PC + imm; // PC + offset
         else if(dojalr = 1) // jalr
@@ -250,6 +264,8 @@ module CHIP #(                                                                  
             PC <= next_PC;
         end
     end
+
+    
 endmodule
 
 module Reg_file(i_clk, i_rst_n, wen, rs1, rs2, rd, wdata, rdata1, rdata2);
@@ -359,17 +375,17 @@ module RegWriteData (
             wdata <= 32'b0;
     end
 endmodule
-module ALU(in1, in2, ALUctrl, result, zero);
+module ALU(in1, in2, ALUctrl, result, zero, lessthan);
     parameter DATA_W = 32;
     input  [DATA_W-1:0] in1; 
     input  [DATA_W-1:0] in2;
     input  [2:0]        ALUctrl;
     output [DATA_W-1:0] result;
-    output              zero;
+    output              zero, lessthan;
 
     wire signed [DATA_W-1: 0] signed_in1, signed_in2;
     reg [DATA_W-1 : 0] result_reg;
-    reg zero_reg;
+    reg zero_reg, lessthan_reg;
 
     parameter ADD   = 3'd0;
     parameter SUB   = 3'd1;
@@ -383,7 +399,8 @@ module ALU(in1, in2, ALUctrl, result, zero);
     assign signed_in1 = in1;
     assign signed_in2 = in2;
     assign result = result_reg;
-
+    assign zero = zero_reg;
+    assign lessthan = lessthan_reg;
     always @(*) begin
         case (ALUctrl)
             ADD: begin
@@ -401,9 +418,12 @@ module ALU(in1, in2, ALUctrl, result, zero);
                     if (~in1[31] && in2[31] && result_reg[31]) result_reg[31:0] = {1'b0,{31{1'b1}}};
                     else if (in1[31] && ~in2[31] && ~result_reg[31]) result_reg[31:0] = {1'b1,{31{1'b0}}};
                 end
-                //zero for beq
-                if(result_reg == 32'b0) zero = 1'b1;
-
+                //zero for beq, bne
+                if(result_reg == 32'b0) zero_reg = 1'b1;
+                else zero_reg = 1'b0;
+                //lessthan for bge, blt
+                if(result_reg[32] == 1'b1) lessthan_reg = 1'b1;
+                else lessthan_reg = 1'b0;
             end
             AND: result_reg[31:0] = in1 & in2;
             XOR: result_reg[31:0] = in1 ^ in2;
