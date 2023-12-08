@@ -29,7 +29,7 @@ module CHIP #(                                                                  
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
 
     // TODO: any declaration
-    // func7 opcode
+    // opcode
     parameter R_type = 7'b0110011; // add, sub, and, xor, mul
     parameter I_type = 7'b0010011; // addi, slli, slti, srai(not including lw and jalr)
     parameter auipc_type  = 7'b0010111; // auipc
@@ -39,6 +39,10 @@ module CHIP #(                                                                  
     parameter jal_type = 7'b1101111; // jal
     parameter jalr_type = 7'b1100111; // jalr
     parameter ecall_type = 7'b1110011; // ecall
+    //state
+    parameter S_IDLE = 2'd0;
+    parameter S_MUL_init = 2'd1;
+    parameter S_MUL = 2'd2;
 
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
 // Wires and Registers
@@ -48,19 +52,23 @@ module CHIP #(                                                                  
     reg [BIT_W-1:0] PC, next_PC;
     reg go_Branch_reg;
 
-    wire mem_cen, mem_wen;
-    wire [BIT_W-1:0] mem_addr, mem_wdata, mem_rdata;
-    wire mem_stall;
+    //wire mem_cen, mem_wen;
+    //wire [BIT_W-1:0] mem_addr, mem_wdata, mem_rdata;
+    //wire mem_stall;
     wire [6:0] opcode;
     wire [2:0] funct3;
+    wire [6:0] funct7;
     wire [4:0] rs1, rs2, rd;
 
     wire [BIT_W-1:0] reg_rdata_1, reg_rdata_2, reg_wdata, alu_in1, alu_in2, alu_result;
     //control signal
     wire zero, lessthan;
-    wire goBranch, Branch, MemRead, MemtoReg, MemWrite, ALUsrc, RegWrite, IsMUL, MULdone;
+    wire goBranch, Branch, MemRead, MemtoReg, MemWrite, ALUsrc, RegWrite, IsMUL, MULdone, Isecall;
     wire [1:0] ALUop;
     wire [3:0] ALUctrl;
+    //mul
+    reg state, state_nxt, mul_valid_reg;
+    wire mul_valid;
         
 
 
@@ -71,6 +79,7 @@ module CHIP #(                                                                  
     assign PC = o_IMEM_addr;
     assign opcode = i_IMEM_data[6:0];
     assign funct3 = i_IMEM_data[14:12];
+    assign funct7 = i_IMEM_data[31:25];
     assign rs2 = i_IMEM_data[24:20];
     assign rs1 = i_IMEM_data[19:15];
     assign rd = i_IMEM_data[11:7];
@@ -83,13 +92,17 @@ module CHIP #(                                                                  
     assign o_DMEM_wen = MemWrite & (~MemRead);
     assign o_DMEM_addr = ALU_result;
     assign o_DMEM_wdata = reg_rdata_2;
+    //assignment for mul
+    assign mul_valid_reg = mul_valid;
+    //assignment for finish
+    assign o_finish = Isecall;
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
 // Submoddules
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
     ALU alu(.in1(alu_in1), .in2(alu_in2), .ALUctrl(ALUctrl), .result(alu_result), zero.(zero), .lessthan(lessthan));
-    MULDIV_unit mul(.result(aluresult), .o_done(MULdone), .i_clk(i_clk), .i_valid(IsMUL), .i_A(alu_in1), .i_B(alu_in2));
+    MULDIV_unit mul(.result(aluresult), .o_done(MULdone), .i_clk(i_clk), .i_valid(mul_valid), .i_A(alu_in1), .i_B(alu_in2));
     ALUcontrol alucontrol(.ALUop(ALUop), .MUL(IsMUL), .ALUctrl(ALUctrl), .funct7(func7), .funct3(funct3));
-    RegWriteData regwd(.Isjal(dojal), .Isjalr(dojalr), .Isauipc(auipc_ctrl), .IsMemtoReg(MemtoReg), .reg_wdata(reg_wdata), .PC(PC), .imm(imm), .mem_rdata(i_DMEM_rdata));
+    RegWriteData regwd(.Isjal(dojal), .Isjalr(dojalr), .Isauipc(auipc_ctrl), .IsMemtoReg(MemtoReg), .IsRegWrite(RegWrite) .reg_wdata(reg_wdata), .PC(PC), .imm(imm), .mem_rdata(i_DMEM_rdata));
     // TODO: Reg_file wire connection
     Reg_file reg0(               
         .i_clk  (i_clk),             
@@ -121,6 +134,7 @@ module CHIP #(                                                                  
         MemRead = 0;
         dojal = 0;
         dojalr = 0;
+        Isecall = 0;
         // will use ALU: lw,sw,B_type,R_type,I_type
         // ALUop=00:lw,sw 01:B_type 10:R_type 11:I_type
         case(opcode)
@@ -192,6 +206,16 @@ module CHIP #(                                                                  
                 MemtoReg = 0;
                 dojalr = 1;
             end
+            ecall_type: begin
+                ALUsrc = 0;
+                ALUop = 2'b0;
+                RegWrite = 0; // write pc+4 to rd
+                MemWrite = 0;
+                MemRead = 0;
+                MemtoReg = 0;
+                dojalr = 0;
+                Isecall = 1;
+            end
         endcase
     end
 
@@ -238,6 +262,21 @@ module CHIP #(                                                                  
                 imm = {{20{i_IMEM_data[31]}}, i_IMEM_data[31:20]};
         endcase
     end
+    //FSM for mul
+    always @(posedge i_clk) begin
+        case(state)
+            S_IDLE: state_nxt <= (IsMUL) ? S__MUL_init: S_IDLE;
+            S_MUL_init: begin
+                state_nxt <= S_MUL;
+                mul_valid_reg <= 1'b1;
+            end
+            S_MUL: begin
+                state_nxt <= (MULdone) ? S_IDLE: S_MUL;
+                mul_valid_reg <= 1'b0;
+            end          
+            default : state_nxt <= state;
+        endcase
+    end
     //Determine when to goBranch
     always @(*) begin
         if (Branch) begin
@@ -264,12 +303,11 @@ module CHIP #(                                                                  
             else
                 next_PC <= PC;
         end
-        else if(Branch == 1) // B-type
-            PCbranch = (imm << 1) + PC;
+        else if(Branch) // B-type
             next_PC <= (goBranch) ? ((imm << 1) + PC) : (PC + 32'b100); // goBranch = Branch & Zero
-        else if(dojal == 1) // jal
+        else if(dojal) // jal
             next_PC <= PC + imm; // PC + offset
-        else if(dojalr = 1) // jalr
+        else if(dojalr) // jalr
             next_PC <= rs1 + imm; // set PC = rs1 + offset
         else
             next_PC <= PC + 32'b100;
@@ -354,7 +392,7 @@ module ALUcontrol(MUL, ALUctrl, funct7, funct3, ALUop);
                 else if(~func7[5]&&~func7[0]) //func7 = 0000000
                     ALUctrl = ADD;
                 else                          //func7 = 0000001
-                    MUL = 1;
+                    MUL = 1'b1;
             end
             3'b001: ALUctrl = SLL;
             3'b010: ALUctrl = SLT;
@@ -370,30 +408,36 @@ module ALUcontrol(MUL, ALUctrl, funct7, funct3, ALUop);
             endcase
         default:begin
             ALUctrl = 3'd7;
-            MUL = 0;
+            MUL = 1'b0;
         end
     endcase
 endmodule
 
 module RegWriteData (
-    Isjal, Isjalr, Isauipc, IsMemtoReg, reg_wdata, PC, imm, mem_rdata
+    Isjal, Isjalr, Isauipc, IsMemtoReg, IsRegWrite, reg_wdata, PC, imm, mem_rdata, alu_result
 );
     input Isjal, Isjalr, Isauipc, IsMemWrite;
-    input  [31:0] PC, imm, mem_rdata;
+    input  [31:0] PC, imm, mem_rdata, alu_result;
     output [31:0] reg_wdata;
     reg [31:0] wdata;
     assign reg_wdata = wdata;
+
     always @(*) begin
-        if(IsMemtoReg)
-            wdata <= mem_rdata;
-        else if(Isjal | Isjalr)
-            wdata <= PC + 32'd4;
-        else if(Isauipc)
-            wdata <= PC + imm;
+        if(RegWrite) begin
+            if(IsMemtoReg)            //store
+                wdata <= mem_rdata;
+            else if(Isjal | Isjalr)   //jal or jalr
+                wdata <= PC + 32'd4;
+            else if(Isauipc)          //auipc
+                wdata <= PC + imm;
+            else                      //R_type
+                wdata <= alu_result;
+        end
         else
             wdata <= 32'b0;
     end
 endmodule
+
 module ALU(in1, in2, ALUctrl, result, zero, lessthan);
     parameter DATA_W = 32;
     input  [DATA_W-1:0] in1; 
