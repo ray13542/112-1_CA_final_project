@@ -193,6 +193,24 @@ module CHIP #(                                                                  
             end
         endcase
     end
+
+    // determine beq, bne, blt, bge
+    reg isbeq, isbne, isble, isbge;
+    always@(*) begin
+        isbeq = 0;
+        isbne = 0;
+        isblt = 0;
+        isbeg = 0;
+        if(funct3 == 3'b000)
+            isbeq = 1;
+        else if(funct3 == 3'b001)
+            isbne = 1;
+        else if(funct3 == 3'b100)
+            isblt = 1;
+        else if(funct3 == 3'b101)
+            isbge = 1;
+    end
+    
     
     // ImmGen part
     reg [31:0] imm;
