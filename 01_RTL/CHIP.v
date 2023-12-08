@@ -110,7 +110,7 @@ module CHIP #(                                                                  
     
     // Control 
     // reg Branch, MemRead, MemtoReg, MemWrite, ALUsrc, RegWrite;
-    reg dojal, dojalr;
+    reg dojal, dojalr, auipc_ctrl;
     always @(*) begin
         ALUsrc = 0;
         RegWrite = 0;
@@ -144,7 +144,8 @@ module CHIP #(                                                                  
                 RegWrite = 1; // rd stores pc+imm
                 MemWrite = 0;
                 MemRead = 0;
-                MemtoReg = 0; //
+                MemtoReg = 0;
+                auipc_ctrl = 1;
             end
             sw_type: begin
                 ALUsrc = 1;
