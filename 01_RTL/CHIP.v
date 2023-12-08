@@ -142,12 +142,8 @@ module CHIP #(                                                                  
             end
             sw_type: begin
                 ALUsrc = 1;
-<<<<<<< HEAD
                 RegWrite = 0;
                 ALUop = 2'b0;
-=======
-                ALUop = 2'b0;  
->>>>>>> cc870ab7ef72caec5a598d156266b8f676dbe3b2
                 RegWrite = 0;
                 MemWrite = 1;
                 MemRead = 0;
@@ -383,7 +379,6 @@ module MULDIV_unit(
 //Parameter
     //ALUctrl
     parameter MUL  = 3'd7;
-    parameter DIV  = 3'd8;
     //state
     parameter S_IDLE           = 2'd0;
     parameter S_MULTI_CYCLE_OP = 2'd1;
@@ -436,13 +431,6 @@ module MULDIV_unit(
                     if(counter >= 0)begin
                         result_reg = (result_reg[0]) ? {result_reg[64:32] + operand_b, result_reg[31:0]}: result_reg;
                         result_reg = result_reg >> 1;
-                    end
-                    else result_reg = 0;
-                end
-                DIV: begin
-                    if(counter >= 0)begin
-                        result_reg = result_reg << 1;
-                        result_reg = (result_reg[63:32] >= operand_b) ? {result_reg[64:32] - operand_b, result_reg[31:0]}+1'b1: result_reg;
                     end
                     else result_reg = 0;
                 end

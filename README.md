@@ -21,6 +21,14 @@ Todo:
     5. Muldiv
 
     6. Memory
+        stall = 1 if load or store
+        rdata = o_rdata (in memory.v)
+        o_DMEM_cen = MemRead | MemWrite
+        o_DMEM_wen = MemWrite & (~MemRead)
+        o_DMEM_addr = ALU_result
+        o_DMEM_wdata = reg_rdata_2
+
+
 
     7. Write Back
 
