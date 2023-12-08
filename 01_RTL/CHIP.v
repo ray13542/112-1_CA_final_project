@@ -58,7 +58,7 @@ module CHIP #(                                                                  
     wire [BIT_W-1:0] reg_rdata_1, reg_rdata_2, alu_in1, alu_in2, alu_result;
     //control signal
     wire zero;
-    wire goBranch, Branch, MemRead, MemtoReg, MemWrite, ALUsrc, RegWrite;
+    wire goBranch, Branch, MemRead, MemtoReg, MemWrite, ALUsrc, RegWrite, IsMUL, MULdone;
     wire [1:0] ALUop;
     wire [3:0] ALUctrl;
         
@@ -75,14 +75,20 @@ module CHIP #(                                                                  
     assign rs1 = i_IMEM_data[19:15];
     assign rd = i_IMEM_data[11:7];
     assign goBranch = Branch & zero;
+    //assignment for alu
     assign alu_in1 = reg_rdata_1;
     assign alu_in2 = (ALUsrc)? imm : reg_rdata_2;
+    //assignment for memory
+    assign o_DMEM_cen = MemRead | MemWrite;
+    assign o_DMEM_wen = MemWrite & (~MemRead);
+    assign o_DMEM_addr = ALU_result;
+    assign o_DMEM_wdata = reg_rdata_2;
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
 // Submoddules
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
     ALU alu(.in1(alu_in1), .in2(alu_in2), .ALUctrl(ALUctrl), .result(alu_result), zero.(zero));
-    MULDIV_unit mul(.result(aluresult), .o_done(), .i_clk(i_clk), .i_valid(), .i_A(alu_in1), .i_B(alu_in2), .ALUctrl(ALUctrl));
-    ALUcontrol alucontrol(.ALUop(ALUop), .ALUctrl(ALUctrl), .funct7(), .funct3(funct3));
+    MULDIV_unit mul(.result(aluresult), .o_done(MULdone), .i_clk(i_clk), .i_valid(IsMUL), .i_A(alu_in1), .i_B(alu_in2), .ALUctrl(ALUctrl));
+    ALUcontrol alucontrol(.ALUop(ALUop), .ALUctrl(ALUctrl), .funct7(func7), .funct3(funct3));
     // TODO: Reg_file wire connection
     Reg_file reg0(               
         .i_clk  (i_clk),             
@@ -91,7 +97,7 @@ module CHIP #(                                                                  
         .rs1    (rs1),                
         .rs2    (rs2),                
         .rd     (rd),                 
-        .wdata  (),             
+        .wdata  (i_DMEM_rdata),             
         .rdata1 (reg_rdata_1),           
         .rdata2 (reg_rdata_2)
     );
@@ -209,8 +215,7 @@ module CHIP #(                                                                  
                 imm = {{20{i_IMEM_data[31]}}, i_IMEM_data[31:20]};
         endcase
     end
-    // OK -> still need to do : When ALUsrc = 1, imm passes to ALU ; When ALUsrc = 0, Read_data_2 passes to ALU
-                
+            
     
     always @(posedge i_clk) begin
         PCadd4 = PC + 4; //PC 
@@ -271,11 +276,12 @@ module Reg_file(i_clk, i_rst_n, wen, rs1, rs2, rd, wdata, rdata1, rdata2);
         end       
     end
 endmodule
-module ALUcontrol(ALUop, ALUctrl, funct7, funct3);
+module ALUcontrol(MUL, ALUctrl, funct7, funct3, ALUop);
     input [1:0] ALUop;
     input [2:0] funct3;
-    input funct7;
+    input [6:0] funct7;
     output [2:0] ALUctrl;
+    output MUL;
 
     parameter ADD  = 3'd0;
     parameter SUB  = 3'd1;
@@ -288,24 +294,30 @@ module ALUcontrol(ALUop, ALUctrl, funct7, funct3);
         2'b00: ALUctrl = ADD;
         2'b01: ALUctrl = SUB;
         2'b10: case (funct3)
-            3'b000: ALUctrl = (funct7) ? SUB:ADD;
+            3'b000: begin
+                if(func7[5]&&~func7[0])       //func7 = 0100000
+                    ALUctrl = SUB;
+                else if(~func7[5]&&~func7[0]) //func7 = 0000000
+                    ALUctrl = ADD;
+                else                          //func7 = 0000001
+                    MUL = 1;
+            end
             3'b001: ALUctrl = SLL;
             3'b010: ALUctrl = SLT;
             3'b100: ALUctrl = XOR;
             3'b101: ALUctrl = SRA;
             3'b111: ALUctrl = AND;
-            default: 
             endcase
         2'b11: case (funct3)
-            3'b000: ALUctrl = (funct7) ? SUB:ADD;
+            3'b000: ALUctrl = ADD;
             3'b001: ALUctrl = SLL;
             3'b010: ALUctrl = SLT;
-            3'b100: ALUctrl = XOR;
             3'b101: ALUctrl = SRA;
-            3'b111: ALUctrl = AND;
-            default: 
             endcase
-        default: 
+        default:begin
+            ALUctrl = 3'd7;
+            MUL = 0;
+        end
     endcase
 
 endmodule
@@ -321,13 +333,14 @@ module ALU(in1, in2, ALUctrl, result, zero);
     reg [DATA_W-1 : 0] result_reg;
     reg zero_reg;
 
-    parameter ADD  = 3'd0;
-    parameter SUB  = 3'd1;
-    parameter AND  = 3'd2;
-    parameter XOR  = 3'd3;
-    parameter SLT  = 3'd4;
-    parameter SRA  = 3'd5;
-    parameter SLL  = 3'd6;
+    parameter ADD   = 3'd0;
+    parameter SUB   = 3'd1;
+    parameter AND   = 3'd2;
+    parameter XOR   = 3'd3;
+    parameter SLT   = 3'd4;
+    parameter SRA   = 3'd5;
+    parameter SLL   = 3'd6;
+    parameter DONTH = 3'd7;
 
     assign signed_in1 = in1;
     assign signed_in2 = in2;
@@ -359,6 +372,7 @@ module ALU(in1, in2, ALUctrl, result, zero);
             SLT: result_reg[31:0] = (signed_in1 < signed_in2)? 1:0;
             SRA: result_reg[31:0] = {{32{in1[31]}},in1} >> in2;
             SLL: result_reg[31:0] = in1 << in2;
+            DONTH: result_reg[31:0] = 0;
         endcase
     end
 endmodule
