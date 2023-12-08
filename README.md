@@ -38,7 +38,9 @@ Todo:
         input: ALUop(2bit) func3, func7
         output: ALUctrl
     10. jal : next_pc = pc + imm
-        jalr : next_pc = pc + result of alu
+        jalr : next_pc = rs1 + imm
+    11. use ALU: R, I, B-type
+        
     
     *always block
     1. Intruction fetch
