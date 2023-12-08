@@ -35,7 +35,7 @@ module CHIP #(                                                                  
     parameter auipc_type  = 7'b0010111; // auipc
     parameter sw_type = 7'b0100011; // sw
     parameter lw_type = 7'b0000011; // lw
-    parameter beq_type = 7'b1100011; // beq, bge, blt, bne
+    parameter B_type = 7'b1100011; // beq, bge, blt, bne
     parameter jal_type = 7'b1101111; // jal
     parameter jalr_type = 7'b1100111; // jalr
     parameter ecall_type = 7'b1110011; // ecall
@@ -120,14 +120,12 @@ module CHIP #(                                                                  
                 ALUsrc = 0;
                 RegWrite = 1;
                 ALUop = 2'b10;
-                RegWrite = 1;
                 MemWrite = 0;
                 MemRead = 0;
                 MemtoReg = 0;
             end
             I_type: begin // addi, slli, slti, srai
                 ALUsrc = 1;
-                RegWrite = 1;
                 ALUop = 2'b11;
                 RegWrite = 1;
                 MemWrite = 0;
@@ -136,7 +134,6 @@ module CHIP #(                                                                  
             end
             auipc_type: begin
                 ALUsrc = 1;
-                RegWrite = 1;
                 ALUop = 2'b0;
                 RegWrite = 1; // rd stores pc+imm
                 MemWrite = 0;
@@ -145,7 +142,6 @@ module CHIP #(                                                                  
             end
             sw_type: begin
                 ALUsrc = 1;
-                RegWrite = 0;
                 ALUop = 2'b0;  
                 RegWrite = 0;
                 MemWrite = 1;
@@ -154,26 +150,23 @@ module CHIP #(                                                                  
             end
             lw_type: begin
                 ALUsrc = 1;
-                RegWrite = 1;
                 ALUop = 2'b0;
                 RegWrite = 1;
                 MemWrite = 0;
                 MemRead = 1;
                 MemtoReg = 1;
             end
-            beq_type: begin
+            B_type: begin
                 ALUsrc = 0;
-                RegWrite = 0;
                 ALUop = 2'b01;
-                Branch = 1; // branch
-                MemWrite = 0;
                 RegWrite = 0;
+                MemWrite = 0;
                 MemRead = 0;
                 MemtoReg = 0;
+                Branch = 1; // branch
             end
             jal_type: begin
                 ALUsrc = 1;
-                reg_write = 1;
                 ALUop = 2'b0;
                 RegWrite = 1; // write pc+4 to rd
                 MemWrite = 0;
@@ -182,7 +175,6 @@ module CHIP #(                                                                  
             end
             jalr_type: begin
                 ALUsrc = 1;
-                reg_write = 1;
                 ALUop = 2'b0;
                 RegWrite = 1; // write pc+4 to rd
                 MemWrite = 0;
