@@ -55,7 +55,7 @@ module CHIP #(                                                                  
     wire [2:0] funct3;
     wire [4:0] rs1, rs2, rd;
 
-    wire [BIT_W-1:0] reg_rdata_1, reg_rdata_2, alu_in1, alu_in2, alu_result;
+    wire [BIT_W-1:0] reg_rdata_1, reg_rdata_2, reg_wdata, alu_in1, alu_in2, alu_result;
     //control signal
     wire zero;
     wire goBranch, Branch, MemRead, MemtoReg, MemWrite, ALUsrc, RegWrite, IsMUL, MULdone;
@@ -87,8 +87,8 @@ module CHIP #(                                                                  
 // Submoddules
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
     ALU alu(.in1(alu_in1), .in2(alu_in2), .ALUctrl(ALUctrl), .result(alu_result), zero.(zero));
-    MULDIV_unit mul(.result(aluresult), .o_done(MULdone), .i_clk(i_clk), .i_valid(IsMUL), .i_A(alu_in1), .i_B(alu_in2), .ALUctrl(ALUctrl));
-    ALUcontrol alucontrol(.ALUop(ALUop), .ALUctrl(ALUctrl), .funct7(func7), .funct3(funct3));
+    MULDIV_unit mul(.result(aluresult), .o_done(MULdone), .i_clk(i_clk), .i_valid(IsMUL), .i_A(alu_in1), .i_B(alu_in2));
+    ALUcontrol alucontrol(.ALUop(ALUop), .MUL(IsMUL), .ALUctrl(ALUctrl), .funct7(func7), .funct3(funct3));
     // TODO: Reg_file wire connection
     Reg_file reg0(               
         .i_clk  (i_clk),             
@@ -330,7 +330,26 @@ module ALUcontrol(MUL, ALUctrl, funct7, funct3, ALUop);
             MUL = 0;
         end
     endcase
+endmodule
 
+module RegWriteData (
+    Isjal, Isjalr, Isauipc, IsMemtoReg, reg_wdata, PC, imm, mem_rdata
+);
+    input Isjal, Isjalr, Isauipc, IsMemWrite;
+    input  [31:0] PC, imm, mem_rdata;
+    output [31:0] reg_wdata;
+    reg [31:0] wdata;
+    assign reg_wdata = wdata;
+    always @(*) begin
+        if(IsMemtoReg)
+            wdata <= mem_rdata;
+        else if(Isjal | Isjalr)
+            wdata <= PC + 32'd4;
+        else if(Isauipc)
+            wdata <= PC + imm;
+        else
+            wdata <= 32'b0;
+    end
 endmodule
 module ALU(in1, in2, ALUctrl, result, zero);
     parameter DATA_W = 32;
@@ -390,19 +409,17 @@ endmodule
 
 
 module MULDIV_unit(
-    result, o_done, i_clk, i_valid, i_A, i_B, ALUctrl
+    result, o_done, i_clk, i_valid, i_A, i_B
     );
     // Todo: HW2
     parameter DATA_W = 32;
     input  i_clk, i_valid;
     input  [DATA_W - 1 : 0]     i_A;    // input operand A
     input  [DATA_W - 1 : 0]     i_B;    // input operand B
-    input  [         2 : 0]     ALUctrl; // instruction
     output [DATA_W - 1 : 0]     result; // output value
     output                      o_done; // output valid signal
 //Parameter
     //ALUctrl
-    parameter MUL  = 3'd7;
     //state
     parameter S_IDLE           = 2'd0;
     parameter S_MULTI_CYCLE_OP = 2'd1;
@@ -435,7 +452,7 @@ module MULDIV_unit(
         case(state)
             S_IDLE           : begin
                 if(!i_valid) state_nxt <= S_IDLE;
-                else state_nxt <= (ALUctrl < 3'd7) ? S_ONE_CYCLE_OP : S_MULTI_CYCLE_OP;
+                else state_nxt <= (i_valid) ? S_MULTI_CYCLE_OP : S_IDLE;
             end
             S_MULTI_CYCLE_OP : state_nxt <= (counter == 32) ? S_IDLE : state;
             default : state_nxt <= state;
@@ -450,16 +467,11 @@ module MULDIV_unit(
     always @(negedge i_clk) begin
         if (i_valid) result_reg = i_A;
         if (state == S_MULTI_CYCLE_OP) begin
-            case (ALUctrl)
-                MUL:begin
-                    if(counter >= 0)begin
-                        result_reg = (result_reg[0]) ? {result_reg[64:32] + operand_b, result_reg[31:0]}: result_reg;
-                        result_reg = result_reg >> 1;
-                    end
-                    else result_reg = 0;
+                if(counter >= 0)begin
+                    result_reg = (result_reg[0]) ? {result_reg[64:32] + operand_b, result_reg[31:0]}: result_reg;
+                    result_reg = result_reg >> 1;
                 end
-                default: result_reg = 0;
-            endcase
+                else result_reg = 0;
         end
     end
     //o_done signal
