@@ -104,7 +104,7 @@ module CHIP #(                                                                  
     
     // Control 
     // reg Branch, MemRead, MemtoReg, MemWrite, ALUsrc, RegWrite;
-    reg jal,jalr;
+    reg dojal, dojalr;
     always @(*) begin
         ALUsrc = 0;
         RegWrite = 0;
@@ -112,8 +112,8 @@ module CHIP #(                                                                  
         MemtoReg = 0;
         MemWrite = 0;
         MemRead = 0;
-        gojal = 0;
-        gojalr = 0;
+        dojal = 0;
+        dojalr = 0;
         // 
         case(opcode)
             R_type: begin
@@ -171,7 +171,8 @@ module CHIP #(                                                                  
                 RegWrite = 1; // write pc+4 to rd
                 MemWrite = 0;
                 MemRead = 0;
-                MemtoReg = 0; 
+                MemtoReg = 0;
+                dojal = 1;
             end
             jalr_type: begin
                 ALUsrc = 1;
@@ -180,6 +181,7 @@ module CHIP #(                                                                  
                 MemWrite = 0;
                 MemRead = 0;
                 MemtoReg = 0;
+                dojalr = 1;
             end
         endcase
     end
@@ -211,11 +213,19 @@ module CHIP #(                                                                  
     end
     // OK -> still need to do : When ALUsrc = 1, imm passes to ALU ; When ALUsrc = 0, Read_data_2 passes to ALU
                 
-    
+    // deal with PC change
     always @(posedge i_clk) begin
-        PCadd4 = PC + 4; //PC 
-        PCbranch = (imm << 1) + PC;
-        next_PC = (gobranch)? PCbranch: PCadd4;
+        // PCadd4 = PC + 4;
+        if(Branch == 1) // B-type
+            PCbranch = (imm << 1) + PC;
+            next_PC <= (gobranch) ? ((imm << 1) + PC) : (PC + 32'b100); // goBranch = Branch & Zero
+        else if(dojal == 1) // jal
+            next_PC <= PC + imm; // PC + offset
+        else if(dojalr = 1)
+            next_PC <= rs1 + imm; // set PC = rs1 + offset
+        else
+            next_PC <= PC + 32'b100;
+        // still need to do MUL, SW
     end
 
     always @(posedge i_clk or negedge i_rst_n) begin
