@@ -31,7 +31,7 @@ module CHIP #(                                                                  
     // TODO: any declaration
     // func7 opcode
     parameter R_type = 7'b0110011; // add, sub, and, xor, mul
-    parameter I_type = 7'b0010011; // addi, slli, slti, srai
+    parameter I_type = 7'b0010011; // addi, slli, slti, srai(not including lw and jalr)
     parameter auipc_type  = 7'b0010111; // auipc
     parameter sw_type = 7'b0100011; // sw
     parameter lw_type = 7'b0000011; // lw
@@ -120,7 +120,8 @@ module CHIP #(                                                                  
         MemRead = 0;
         dojal = 0;
         dojalr = 0;
-        // 
+        // will use ALU: lw,sw,B_type,R_type,I_type
+        // ALUop=00:lw,sw 01:B_type 10:R_type 11:I_type
         case(opcode)
             R_type: begin
                 ALUsrc = 0;
