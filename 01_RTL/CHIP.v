@@ -50,7 +50,7 @@ module CHIP #(                                                                  
     
     // TODO: any declaration
     reg [BIT_W-1:0] PC, next_PC;
-    reg go_Branch_reg;
+    reg [31:0] imm;
 
     //wire mem_cen, mem_wen;
     //wire [BIT_W-1:0] mem_addr, mem_wdata, mem_rdata;
@@ -62,10 +62,12 @@ module CHIP #(                                                                  
 
     wire [BIT_W-1:0] reg_rdata_1, reg_rdata_2, reg_wdata, alu_in1, alu_in2, alu_result;
     //control signal
-    wire zero, lessthan;
-    wire goBranch, Branch, MemRead, MemtoReg, MemWrite, ALUsrc, RegWrite, IsMUL, MULdone, Isecall;
-    wire [1:0] ALUop;
-    wire [3:0] ALUctrl;
+    wire zero, lessthan, goBranch, IsMUL, MULdone;
+    reg Branch, MemRead, MemtoReg, MemWrite, ALUsrc, RegWrite, Isecall;
+    reg [1:0] ALUop;
+    wire [2:0] ALUctrl;
+    reg dojal, dojalr, auipc_ctrl, isbeq, isbne, isblt, isbge;
+    reg goBranch_reg;
     //mul
     reg state, state_nxt, mul_valid_reg;
     wire mul_valid;
@@ -76,33 +78,33 @@ module CHIP #(                                                                  
 // Continuous Assignment
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
     // TODO: any wire assignment
-    assign PC = o_IMEM_addr;
+    assign o_IMEM_addr = PC;
     assign opcode = i_IMEM_data[6:0];
     assign funct3 = i_IMEM_data[14:12];
     assign funct7 = i_IMEM_data[31:25];
     assign rs2 = i_IMEM_data[24:20];
     assign rs1 = i_IMEM_data[19:15];
     assign rd = i_IMEM_data[11:7];
-    assign goBranch = go_Branch_reg;
+    assign goBranch = goBranch_reg;
     //assignment for alu
     assign alu_in1 = reg_rdata_1;
     assign alu_in2 = (ALUsrc)? imm : reg_rdata_2;
     //assignment for memory
     assign o_DMEM_cen = MemRead | MemWrite;
     assign o_DMEM_wen = MemWrite & (~MemRead);
-    assign o_DMEM_addr = ALU_result;
+    assign o_DMEM_addr = alu_result;
     assign o_DMEM_wdata = reg_rdata_2;
     //assignment for mul
-    assign mul_valid_reg = mul_valid;
+    assign mul_valid = mul_valid_reg;
     //assignment for finish
     assign o_finish = Isecall;
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
 // Submoddules
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
-    ALU alu(.in1(alu_in1), .in2(alu_in2), .ALUctrl(ALUctrl), .result(alu_result), zero.(zero), .lessthan(lessthan));
-    MULDIV_unit mul(.result(aluresult), .o_done(MULdone), .i_clk(i_clk), .i_valid(mul_valid), .i_A(alu_in1), .i_B(alu_in2));
-    ALUcontrol alucontrol(.ALUop(ALUop), .MUL(IsMUL), .ALUctrl(ALUctrl), .funct7(func7), .funct3(funct3));
-    RegWriteData regwd(.Isjal(dojal), .Isjalr(dojalr), .Isauipc(auipc_ctrl), .IsMemtoReg(MemtoReg), .IsRegWrite(RegWrite) .reg_wdata(reg_wdata), .PC(PC), .imm(imm), .mem_rdata(i_DMEM_rdata));
+    ALU alu(.in1(alu_in1), .in2(alu_in2), .ALUctrl(ALUctrl), .result(alu_result), .zero(zero), .lessthan(lessthan));
+    MULDIV_unit mul(.result(alu_result), .o_done(MULdone), .i_clk(i_clk), .i_valid(mul_valid), .i_A(alu_in1), .i_B(alu_in2));
+    ALUcontrol alucontrol(.ALUop(ALUop), .MUL(IsMUL), .ALUctrl(ALUctrl), .funct7(funct7), .funct3(funct3));
+    RegWriteData regwd(.Isjal(dojal), .Isjalr(dojalr), .Isauipc(auipc_ctrl), .IsMemtoReg(MemtoReg), .IsRegWrite(RegWrite), .reg_wdata(reg_wdata), .PC(PC), .imm(imm), .mem_rdata(i_DMEM_rdata), .alu_result(alu_result));
     // TODO: Reg_file wire connection
     Reg_file reg0(               
         .i_clk  (i_clk),             
@@ -124,7 +126,6 @@ module CHIP #(                                                                  
     
     // Control 
     // reg Branch, MemRead, MemtoReg, MemWrite, ALUsrc, RegWrite;
-    reg dojal, dojalr, auipc_ctrl;
     always @(*) begin
         ALUsrc = 0;
         RegWrite = 0;
@@ -220,12 +221,11 @@ module CHIP #(                                                                  
     end
 
     // determine beq, bne, blt, bge
-    reg isbeq, isbne, isble, isbge;
     always@(*) begin
         isbeq = 0;
         isbne = 0;
         isblt = 0;
-        isbeg = 0;
+        isbge = 0;
         if(funct3 == 3'b000)
             isbeq = 1;
         else if(funct3 == 3'b001)
@@ -238,7 +238,6 @@ module CHIP #(                                                                  
     
     
     // ImmGen part
-    reg [31:0] imm;
     always@(*) begin
         imm = 0;
         case(opcode)
@@ -265,7 +264,7 @@ module CHIP #(                                                                  
     //FSM for mul
     always @(posedge i_clk) begin
         case(state)
-            S_IDLE: state_nxt <= (IsMUL) ? S__MUL_init: S_IDLE;
+            S_IDLE: state_nxt <= (IsMUL) ? S_MUL_init: S_IDLE;
             S_MUL_init: begin
                 state_nxt <= S_MUL;
                 mul_valid_reg <= 1'b1;
@@ -374,6 +373,8 @@ module ALUcontrol(MUL, ALUctrl, funct7, funct3, ALUop);
     input [6:0] funct7;
     output [2:0] ALUctrl;
     output MUL;
+    reg [2:0] ALUctrl;
+    reg MUL;
 
     parameter ADD  = 3'd0;
     parameter SUB  = 3'd1;
@@ -382,48 +383,52 @@ module ALUcontrol(MUL, ALUctrl, funct7, funct3, ALUop);
     parameter SLT  = 3'd4;
     parameter SRA  = 3'd5;
     parameter SLL  = 3'd6;
-    case (ALUop)
-        2'b00: ALUctrl = ADD;
-        2'b01: ALUctrl = SUB;
-        2'b10: case (funct3)
-            3'b000: begin
-                if(func7[5]&&~func7[0])       //func7 = 0100000
-                    ALUctrl = SUB;
-                else if(~func7[5]&&~func7[0]) //func7 = 0000000
-                    ALUctrl = ADD;
-                else                          //func7 = 0000001
-                    MUL = 1'b1;
+    always @(*) begin
+        ALUctrl = 3'd7;
+        MUL = 1'b0;
+        case (ALUop)
+            2'b00: ALUctrl = ADD;
+            2'b01: ALUctrl = SUB;
+            2'b10: case (funct3)
+                3'b000: begin
+                    if(funct7[5]&&~funct7[0])       //func7 = 0100000
+                        ALUctrl = SUB;
+                    else if(~funct7[5]&&~funct7[0]) //func7 = 0000000
+                        ALUctrl = ADD;
+                    else                          //func7 = 0000001
+                        MUL = 1'b1;
+                end
+                3'b001: ALUctrl = SLL;
+                3'b010: ALUctrl = SLT;
+                3'b100: ALUctrl = XOR;
+                3'b101: ALUctrl = SRA;
+                3'b111: ALUctrl = AND;
+                endcase
+            2'b11: case (funct3)
+                3'b000: ALUctrl = ADD;
+                3'b001: ALUctrl = SLL;
+                3'b010: ALUctrl = SLT;
+                3'b101: ALUctrl = SRA;
+                endcase
+            default:begin
+                ALUctrl = 3'd7;
+                MUL = 1'b0;
             end
-            3'b001: ALUctrl = SLL;
-            3'b010: ALUctrl = SLT;
-            3'b100: ALUctrl = XOR;
-            3'b101: ALUctrl = SRA;
-            3'b111: ALUctrl = AND;
-            endcase
-        2'b11: case (funct3)
-            3'b000: ALUctrl = ADD;
-            3'b001: ALUctrl = SLL;
-            3'b010: ALUctrl = SLT;
-            3'b101: ALUctrl = SRA;
-            endcase
-        default:begin
-            ALUctrl = 3'd7;
-            MUL = 1'b0;
-        end
-    endcase
+        endcase
+    end
 endmodule
 
 module RegWriteData (
     Isjal, Isjalr, Isauipc, IsMemtoReg, IsRegWrite, reg_wdata, PC, imm, mem_rdata, alu_result
 );
-    input Isjal, Isjalr, Isauipc, IsMemWrite;
+    input Isjal, Isjalr, Isauipc, IsMemtoReg, IsRegWrite;
     input  [31:0] PC, imm, mem_rdata, alu_result;
     output [31:0] reg_wdata;
     reg [31:0] wdata;
     assign reg_wdata = wdata;
 
     always @(*) begin
-        if(RegWrite) begin
+        if(IsRegWrite) begin
             if(IsMemtoReg)            //store
                 wdata <= mem_rdata;
             else if(Isjal | Isjalr)   //jal or jalr
@@ -485,7 +490,7 @@ module ALU(in1, in2, ALUctrl, result, zero, lessthan);
                 if(result_reg == 32'b0) zero_reg = 1'b1;
                 else zero_reg = 1'b0;
                 //lessthan for bge, blt
-                if(result_reg[32] == 1'b1) lessthan_reg = 1'b1;
+                if(result_reg[31] == 1'b1) lessthan_reg = 1'b1;
                 else lessthan_reg = 1'b0;
             end
             AND: result_reg[31:0] = in1 & in2;
@@ -530,7 +535,6 @@ module MULDIV_unit(
         if (i_valid) begin
             operand_a_nxt = i_A;
             operand_b_nxt = i_B;
-            inst_nxt      = ALUctrl;
         end
         else begin
             operand_a_nxt = operand_a;
@@ -573,19 +577,10 @@ module MULDIV_unit(
         endcase
     end
     //Sequential always block
-    always @(posedge i_clk or negedge i_rst_n) begin
-        if (!i_rst_n) begin
-            state       <= S_IDLE;
-            operand_a   <= 0;
-            operand_b   <= 0;
-            inst        <= 0;
-        end
-        else begin
-            state       <= state_nxt;
-            operand_a   <= operand_a_nxt;
-            operand_b   <= operand_b_nxt;
-            inst        <= inst_nxt;
-        end
+    always @(posedge i_clk)begin
+        state       <= state_nxt;
+        operand_a   <= operand_a_nxt;
+        operand_b   <= operand_b_nxt;
     end
 endmodule
 
