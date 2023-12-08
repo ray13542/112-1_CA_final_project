@@ -49,3 +49,5 @@ Q:
     MUL還需不需要傳ALUctrl? 還是直接輸入i_valid代表要乘法就好?
 
     BEQ、BNE、BLT、BGE在ALU要做甚麼?
+    2 signal (zero lessthan) 
+    BEQ (when zero = 1)、BNE(when zero = 0)、BLT(when lessthan = 1)、BGE(when lessthan = 0)

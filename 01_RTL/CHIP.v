@@ -146,7 +146,7 @@ module CHIP #(                                                                  
             sw_type: begin
                 ALUsrc = 1;
                 RegWrite = 0;
-                ALUop = 2'b0;  
+                ALUop = 2'b0;
                 RegWrite = 0;
                 MemWrite = 1;
                 MemRead = 0;
@@ -221,9 +221,9 @@ module CHIP #(                                                                  
                 
     
     always @(posedge i_clk) begin
-        PCadd4 = PC + 4;
+        PCadd4 = PC + 4; //PC 
         PCbranch = (imm << 1) + PC;
-        next_PC = ()? PCbranch: PCadd4;
+        next_PC = (gobranch)? PCbranch: PCadd4;
     end
 
     always @(posedge i_clk or negedge i_rst_n) begin
@@ -293,9 +293,18 @@ module ALUcontrol(ALUop, ALUctrl, funct7, funct3);
     parameter SRA  = 3'd5;
     parameter SLL  = 3'd6;
     case (ALUop)
-        00: ALUctrl = ADD;
-        01: ALUctrl = SUB;
-        10: case (funct3)
+        2'b00: ALUctrl = ADD;
+        2'b01: ALUctrl = SUB;
+        2'b10: case (funct3)
+            3'b000: ALUctrl = (funct7) ? SUB:ADD;
+            3'b001: ALUctrl = SLL;
+            3'b010: ALUctrl = SLT;
+            3'b100: ALUctrl = XOR;
+            3'b101: ALUctrl = SRA;
+            3'b111: ALUctrl = AND;
+            default: 
+            endcase
+        2'b11: case (funct3)
             3'b000: ALUctrl = (funct7) ? SUB:ADD;
             3'b001: ALUctrl = SLL;
             3'b010: ALUctrl = SLT;
@@ -351,6 +360,7 @@ module ALU(in1, in2, ALUctrl, result, zero);
                 end
                 //zero for beq
                 if(result_reg == 32'b0) zero = 1'b1;
+
             end
             AND: result_reg[31:0] = in1 & in2;
             XOR: result_reg[31:0] = in1 ^ in2;
