@@ -137,6 +137,7 @@ module CHIP #(                                                                  
         dojal = 0;
         dojalr = 0;
         Isecall = 0;
+        auipc_ctrl = 0;
         // will use ALU: lw,sw,B_type,R_type,I_type
         // ALUop=00:lw,sw 01:B_type 10:R_type 11:I_type
         case(opcode)
@@ -431,16 +432,16 @@ module RegWriteData (
     always @(*) begin
         if(IsRegWrite) begin
             if(IsMemtoReg)            //store
-                wdata <= mem_rdata;
+                wdata = mem_rdata;
             else if(Isjal | Isjalr)   //jal or jalr
-                wdata <= PC + 32'd4;
+                wdata = PC + 32'd4;
             else if(Isauipc)          //auipc
-                wdata <= PC + imm;
-            else                      //R_type
-                wdata <= alu_result;
+                wdata = PC + imm;
+            else                      //R_type or I_type
+                wdata = alu_result;
         end
         else
-            wdata <= 32'b0;
+            wdata = 32'b0;
     end
 endmodule
 
