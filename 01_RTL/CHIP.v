@@ -294,24 +294,24 @@ module CHIP #(                                                                  
         end
     end
     // deal with PC change
-    always @(posedge i_clk) begin
+    always @(*) begin
         // PCadd4 = PC + 4;
         if(i_DMEM_stall)
-            next_PC <= PC;
+            next_PC = PC;
         else if(IsMUL) begin // MUL
             if(MULdone)
-                next_PC <= PC + 32'b100;
+                next_PC = PC + 32'd4;
             else
-                next_PC <= PC;
+                next_PC = PC;
         end
         else if(Branch) // B-type
-            next_PC <= (goBranch) ? ((imm << 1) + PC) : (PC + 32'b100); // goBranch = Branch & Zero
+            next_PC = (goBranch) ? ((imm << 1) + PC) : (PC + 32'd4); // goBranch = Branch & Zero
         else if(dojal) // jal
-            next_PC <= PC + imm; // PC + offset
+            next_PC = PC + imm; // PC + offset
         else if(dojalr) // jalr
-            next_PC <= reg_rdata_1 + imm; // set PC = rs1 + offset
+            next_PC = reg_rdata_1 + imm; // set PC = rs1 + offset
         else
-            next_PC <= PC + 32'b100;
+            next_PC = PC + 32'd4;
     end
 
     always @(posedge i_clk or negedge i_rst_n) begin
