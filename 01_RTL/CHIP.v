@@ -78,6 +78,7 @@ module CHIP #(                                                                  
 // Continuous Assignment
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
     // TODO: any wire assignment
+    assign o_IMEM_cen = 1'b1;
     assign o_IMEM_addr = PC;
     assign opcode = i_IMEM_data[6:0];
     assign funct3 = i_IMEM_data[14:12];

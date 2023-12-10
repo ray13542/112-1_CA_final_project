@@ -142,8 +142,9 @@ module Final_tb;
             .o_mem_wdata    (DMEM_wdata),
             .i_mem_rdata    (DMEM_rdata),
             .i_mem_stall    (mem_stall),
-            .o_cache_available (cache_available)
-            
+            .o_cache_available (cache_available),
+        // others
+            .i_offset (mem_data_offset)
     );
 
     // Initialize the data memory
@@ -190,7 +191,6 @@ module Final_tb;
         end
         $readmemh (`MEM_DATA, DMEM.mem); // initialize data in mem_D
         $readmemh (`MEM_GOLDEN, DMEM_golden); // initialize data in mem_D
-        
     end
 
     initial begin
