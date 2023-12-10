@@ -308,7 +308,7 @@ module CHIP #(                                                                  
         else if(dojal) // jal
             next_PC <= PC + imm; // PC + offset
         else if(dojalr) // jalr
-            next_PC <= rs1 + imm; // set PC = rs1 + offset
+            next_PC <= reg_rdata_1 + imm; // set PC = rs1 + offset
         else
             next_PC <= PC + 32'b100;
     end
@@ -607,7 +607,9 @@ module Cache#(
             output [BIT_W*4-1:0]  o_mem_wdata,
             input [BIT_W*4-1:0] i_mem_rdata,
             input i_mem_stall,
-            output o_cache_available
+            output o_cache_available,
+        // others
+            input  [ADDR_W-1: 0] i_offset
     );
 
     assign o_cache_available = 0; // change this value to 1 if the cache is implemented
