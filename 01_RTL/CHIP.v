@@ -103,7 +103,7 @@ module CHIP #(                                                                  
 // Submoddules
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
     ALU alu(.in1(alu_in1), .in2(alu_in2), .ALUctrl(ALUctrl), .result(alu_result), .zero(zero), .lessthan(lessthan));
-    MULDIV_unit mul(.result(alu_result), .o_done(MULdone), .i_clk(i_clk), .i_valid(mul_valid), .i_A(alu_in1), .i_B(alu_in2));
+    //MULDIV_unit mul(.result(alu_result), .o_done(MULdone), .i_clk(i_clk), .i_valid(mul_valid), .i_A(alu_in1), .i_B(alu_in2));
     ALUcontrol alucontrol(.ALUop(ALUop), .MUL(IsMUL), .ALUctrl(ALUctrl), .funct7(funct7), .funct3(funct3));
     RegWriteData regwd(.Isjal(dojal), .Isjalr(dojalr), .Isauipc(auipc_ctrl), .IsMemtoReg(MemtoReg), .IsRegWrite(RegWrite), .reg_wdata(reg_wdata), .PC(PC), .imm(imm), .mem_rdata(i_DMEM_rdata), .alu_result(alu_result));
     // TODO: Reg_file wire connection
@@ -452,10 +452,6 @@ module ALU(in1, in2, ALUctrl, result, zero, lessthan);
     output [DATA_W-1:0] result;
     output              zero, lessthan;
 
-    wire signed [DATA_W-1: 0] signed_in1, signed_in2;
-    reg [DATA_W-1 : 0] result_reg;
-    reg zero_reg, lessthan_reg;
-
     parameter ADD   = 3'd0;
     parameter SUB   = 3'd1;
     parameter AND   = 3'd2;
@@ -465,27 +461,33 @@ module ALU(in1, in2, ALUctrl, result, zero, lessthan);
     parameter SLL   = 3'd6;
     parameter DONTH = 3'd7;
 
+    wire signed [DATA_W-1: 0] signed_in1, signed_in2;
+    reg [DATA_W-1:0] result_reg;
+    reg zero_reg, lessthan_reg;
+
+    
     assign signed_in1 = in1;
     assign signed_in2 = in2;
-    assign result = result_reg;
+    assign result = result_reg[DATA_W-1:0];
     assign zero = zero_reg;
     assign lessthan = lessthan_reg;
+    
     always @(*) begin
         case (ALUctrl)
             ADD: begin
-                result_reg[31:0] = in1 + in2;
+                result_reg = in1 + in2;
                 //overflow
                 if (in1[31] == in2[31]) begin
-                    if (~in1[31] && result_reg[31]) result_reg[31:0] = {1'b0,{31{1'b1}}};
-                    else if (in1[31] && ~result_reg[31]) result_reg[31:0] = {1'b1,{31{1'b0}}};
+                    if (~in1[31] && result_reg[31]) result_reg = {1'b0,{31{1'b1}}};
+                    else if (in1[31] && ~result_reg[31]) result_reg = {1'b1,{31{1'b0}}};
                 end
             end
             SUB: begin
-                result_reg[31:0] = signed_in1 - signed_in2;
+                result_reg = signed_in1 - signed_in2;
                 //overflow
                 if (in1[31] != in2[31]) begin
-                    if (~in1[31] && in2[31] && result_reg[31]) result_reg[31:0] = {1'b0,{31{1'b1}}};
-                    else if (in1[31] && ~in2[31] && ~result_reg[31]) result_reg[31:0] = {1'b1,{31{1'b0}}};
+                    if (~in1[31] && in2[31] && result_reg[31]) result_reg = {1'b0,{31{1'b1}}};
+                    else if (in1[31] && ~in2[31] && ~result_reg[31]) result_reg = {1'b1,{31{1'b0}}};
                 end
                 //zero for beq, bne
                 if(result_reg == 32'b0) zero_reg = 1'b1;
@@ -494,18 +496,18 @@ module ALU(in1, in2, ALUctrl, result, zero, lessthan);
                 if(result_reg[31] == 1'b1) lessthan_reg = 1'b1;
                 else lessthan_reg = 1'b0;
             end
-            AND: result_reg[31:0] = in1 & in2;
-            XOR: result_reg[31:0] = in1 ^ in2;
-            SLT: result_reg[31:0] = (signed_in1 < signed_in2)? 1:0;
-            SRA: result_reg[31:0] = {{32{in1[31]}},in1} >> in2;
-            SLL: result_reg[31:0] = in1 << in2;
-            DONTH: result_reg[31:0] = 0;
+            AND: result_reg = in1 & in2;
+            XOR: result_reg = in1 ^ in2;
+            SLT: result_reg = (signed_in1 < signed_in2)? 32'b1:32'b0;
+            SRA: result_reg = {{32{in1[31]}},in1} >> in2;
+            SLL: result_reg = in1 << in2;
+            default: result_reg = 32'b0;
         endcase
     end
 endmodule
 
 
-module MULDIV_unit(
+/*module MULDIV_unit(
     result, o_done, i_clk, i_valid, i_A, i_B
     );
     // Todo: HW2
@@ -583,7 +585,7 @@ module MULDIV_unit(
         operand_a   <= operand_a_nxt;
         operand_b   <= operand_b_nxt;
     end
-endmodule
+endmodule*/
 
 module Cache#(
         parameter BIT_W = 32,
