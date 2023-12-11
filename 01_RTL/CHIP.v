@@ -60,7 +60,7 @@ module CHIP #(                                                                  
     wire [6:0] funct7;
     wire [4:0] rs1, rs2, rd;
 
-    wire [BIT_W-1:0] reg_rdata_1, reg_rdata_2, reg_wdata, alu_in1, alu_in2, alu_result;
+    wire [BIT_W-1:0] reg_rdata_1, reg_rdata_2, reg_wdata, alu_in1, alu_in2, alu_result, mul_result;
     //control signal
     wire zero, lessthan, goBranch, IsMUL, MULdone;
     reg Branch, MemRead, MemtoReg, MemWrite, ALUsrc, RegWrite, Isecall;
@@ -69,7 +69,8 @@ module CHIP #(                                                                  
     reg dojal, dojalr, auipc_ctrl, isbeq, isbne, isblt, isbge;
     reg goBranch_reg;
     //mul
-    reg state, state_nxt, mul_valid_reg;
+    reg [1:0] state, state_nxt;
+    reg mul_valid_reg;
     wire mul_valid;
         
 
@@ -102,10 +103,45 @@ module CHIP #(                                                                  
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
 // Submoddules
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
-    ALU alu(.in1(alu_in1), .in2(alu_in2), .ALUctrl(ALUctrl), .result(alu_result), .zero(zero), .lessthan(lessthan));
-    //MULDIV_unit mul(.result(alu_result), .o_done(MULdone), .i_clk(i_clk), .i_valid(mul_valid), .i_A(alu_in1), .i_B(alu_in2));
-    ALUcontrol alucontrol(.ALUop(ALUop), .MUL(IsMUL), .ALUctrl(ALUctrl), .funct7(funct7), .funct3(funct3));
-    RegWriteData regwd(.Isjal(dojal), .Isjalr(dojalr), .Isauipc(auipc_ctrl), .IsMemtoReg(MemtoReg), .IsRegWrite(RegWrite), .reg_wdata(reg_wdata), .PC(PC), .imm(imm), .mem_rdata(i_DMEM_rdata), .alu_result(alu_result));
+    ALU alu(
+        .in1(alu_in1), 
+        .in2(alu_in2), 
+        .ALUctrl(ALUctrl), 
+        .result(alu_result), 
+        .zero(zero), 
+        .lessthan(lessthan)
+    );
+    MULDIV_unit mul(
+        .result(mul_result), 
+        .o_done(MULdone), 
+        .i_clk(i_clk), 
+        .i_valid(mul_valid), 
+        .i_A(alu_in1), 
+        .i_B(alu_in2)
+    );
+    ALUcontrol alucontrol(
+        .ALUop(ALUop), 
+        .MUL(IsMUL), 
+        .ALUctrl(ALUctrl), 
+        .funct7(funct7), 
+        .funct3(funct3)
+    );
+    RegWriteData regwd(
+        .Isjal(dojal), 
+        .Isjalr(dojalr), 
+        .Isauipc(auipc_ctrl), 
+        .IsMemtoReg(MemtoReg), 
+        .IsRegWrite(RegWrite), 
+        .reg_wdata(reg_wdata), 
+        .IsMUL(IsMUL),
+        .IsMULdone(MULdone),
+        .PC(PC), 
+        .imm(imm), 
+        .mem_rdata(i_DMEM_rdata), 
+        .alu_result(alu_result),
+        .mul_result(mul_result),
+        .rdata1(alu_in1)
+    );
     // TODO: Reg_file wire connection
     Reg_file reg0(               
         .i_clk  (i_clk),             
@@ -264,9 +300,12 @@ module CHIP #(                                                                  
         endcase
     end
     //FSM for mul
-    always @(posedge i_clk) begin
+    always @(*) begin
         case(state)
-            S_IDLE: state_nxt <= (IsMUL) ? S_MUL_init: S_IDLE;
+            S_IDLE: begin 
+                state_nxt <= (IsMUL) ? S_MUL_init: S_IDLE;
+                mul_valid_reg <= 1'b0;
+            end
             S_MUL_init: begin
                 state_nxt <= S_MUL;
                 mul_valid_reg <= 1'b1;
@@ -277,6 +316,14 @@ module CHIP #(                                                                  
             end          
             default : state_nxt <= state;
         endcase
+    end
+    always @(posedge i_clk or negedge i_rst_n) begin
+        if (!i_rst_n) begin
+            state <= 32'b0;
+        end
+        else begin
+            state <= state_nxt;
+        end
     end
     //Determine when to goBranch
     always @(*) begin
@@ -294,24 +341,24 @@ module CHIP #(                                                                  
         end
     end
     // deal with PC change
-    always @(posedge i_clk) begin
+    always @(*) begin
         // PCadd4 = PC + 4;
         if(i_DMEM_stall)
-            next_PC <= PC;
+            next_PC = PC;
         else if(IsMUL) begin // MUL
             if(MULdone)
-                next_PC <= PC + 32'b100;
+                next_PC = PC + 32'd4;
             else
-                next_PC <= PC;
+                next_PC = PC;
         end
         else if(Branch) // B-type
-            next_PC <= (goBranch) ? ((imm << 1) + PC) : (PC + 32'b100); // goBranch = Branch & Zero
+            next_PC = (goBranch) ? ((imm << 1) + PC) : (PC + 32'd4); // goBranch = Branch & Zero
         else if(dojal) // jal
-            next_PC <= PC + imm; // PC + offset
+            next_PC = PC + imm; // PC + offset
         else if(dojalr) // jalr
-            next_PC <= reg_rdata_1 + imm; // set PC = rs1 + offset
+            next_PC = reg_rdata_1 + imm; // set PC = rs1 + offset
         else
-            next_PC <= PC + 32'b100;
+            next_PC = PC + 32'd4;
     end
 
     always @(posedge i_clk or negedge i_rst_n) begin
@@ -421,10 +468,10 @@ module ALUcontrol(MUL, ALUctrl, funct7, funct3, ALUop);
 endmodule
 
 module RegWriteData (
-    Isjal, Isjalr, Isauipc, IsMemtoReg, IsRegWrite, reg_wdata, PC, imm, mem_rdata, alu_result
+    Isjal, Isjalr, Isauipc, IsMemtoReg, IsRegWrite, IsMUL, IsMULdone, reg_wdata, PC, imm, mem_rdata, alu_result, mul_result, rdata1
 );
-    input Isjal, Isjalr, Isauipc, IsMemtoReg, IsRegWrite;
-    input  [31:0] PC, imm, mem_rdata, alu_result;
+    input Isjal, Isjalr, Isauipc, IsMemtoReg, IsRegWrite, IsMUL, IsMULdone;
+    input  [31:0] PC, imm, mem_rdata, alu_result, mul_result, rdata1;
     output [31:0] reg_wdata;
     reg [31:0] wdata;
     assign reg_wdata = wdata;
@@ -437,6 +484,8 @@ module RegWriteData (
                 wdata = PC + 32'd4;
             else if(Isauipc)          //auipc
                 wdata = PC + imm;
+            else if(IsMUL)
+                wdata = IsMULdone? mul_result : rdata1;
             else                      //R_type or I_type
                 wdata = alu_result;
         end
@@ -508,9 +557,9 @@ module ALU(in1, in2, ALUctrl, result, zero, lessthan);
 endmodule
 
 
-/*module MULDIV_unit(
+module MULDIV_unit(
     result, o_done, i_clk, i_valid, i_A, i_B
-    );
+);
     // Todo: HW2
     parameter DATA_W = 32;
     input  i_clk, i_valid;
@@ -521,13 +570,12 @@ endmodule
 //Parameter
     //ALUctrl
     //state
-    parameter S_IDLE           = 2'd0;
-    parameter S_MULTI_CYCLE_OP = 2'd1;
+    parameter S_IDLE           = 1'd0;
+    parameter S_MULTI_CYCLE_OP = 1'd1;
 
-    reg  [         1: 0] state, state_nxt;
+    reg                  state, state_nxt;
     reg  [  DATA_W-1: 0] operand_a, operand_a_nxt;
     reg  [  DATA_W-1: 0] operand_b, operand_b_nxt;
-    reg  [         2: 0] inst, inst_nxt;
     reg  [         5: 0] counter;
     reg  [  2*DATA_W: 0] result_reg;
     reg  o_done_reg;
@@ -543,7 +591,6 @@ endmodule
         else begin
             operand_a_nxt = operand_a;
             operand_b_nxt = operand_b;
-            inst_nxt      = inst;
         end
     end
     //FSM
@@ -553,13 +600,13 @@ endmodule
                 if(!i_valid) state_nxt <= S_IDLE;
                 else state_nxt <= (i_valid) ? S_MULTI_CYCLE_OP : S_IDLE;
             end
-            S_MULTI_CYCLE_OP : state_nxt <= (counter == 32) ? S_IDLE : state;
-            default : state_nxt <= state;
+            S_MULTI_CYCLE_OP : state_nxt <= (counter == 6'd32) ? S_IDLE : state;
+            default : state_nxt <= S_IDLE;
         endcase
     end
     //counter
     always @(negedge i_clk or negedge i_valid) begin
-        if(~i_valid) counter <= counter + 1;
+        if(~i_valid) counter <= counter + 6'd1;
         else counter <= 0;
     end
     //MUL
@@ -570,14 +617,14 @@ endmodule
                     result_reg = (result_reg[0]) ? {result_reg[64:32] + operand_b, result_reg[31:0]}: result_reg;
                     result_reg = result_reg >> 1;
                 end
-                else result_reg = 0;
+                else result_reg = 32'b0;
         end
     end
     //o_done signal
     always @(posedge i_clk) begin
         case (state)
-            S_MULTI_CYCLE_OP : o_done_reg <= (counter == 32)? 1: 0;
-            default: o_done_reg <= 0;
+            S_MULTI_CYCLE_OP : o_done_reg <= (counter == 6'd32)? 1'b1: 1'b0;
+            default: o_done_reg <= 1'b0;
         endcase
     end
     //Sequential always block
@@ -586,7 +633,7 @@ endmodule
         operand_a   <= operand_a_nxt;
         operand_b   <= operand_b_nxt;
     end
-endmodule*/
+endmodule
 
 module Cache#(
         parameter BIT_W = 32,
