@@ -327,6 +327,7 @@ module CHIP #(                                                                  
     end
     //Determine when to goBranch
     always @(*) begin
+        goBranch_reg = 1'b0;
         if (Branch) begin
             if(isbeq && zero)
                 goBranch_reg = 1'b1;
@@ -352,7 +353,7 @@ module CHIP #(                                                                  
                 next_PC = PC;
         end
         else if(Branch) // B-type
-            next_PC = (goBranch) ? ((imm << 1) + PC) : (PC + 32'd4); // goBranch = Branch & Zero
+            next_PC = (goBranch) ? (imm + PC) : (PC + 32'd4); // goBranch from
         else if(dojal) // jal
             next_PC = PC + imm; // PC + offset
         else if(dojalr) // jalr
@@ -600,7 +601,7 @@ module MULDIV_unit(
                 if(!i_valid) state_nxt <= S_IDLE;
                 else state_nxt <= (i_valid) ? S_MULTI_CYCLE_OP : S_IDLE;
             end
-            S_MULTI_CYCLE_OP : state_nxt <= (counter == 6'd32) ? S_IDLE : state;
+            S_MULTI_CYCLE_OP : state_nxt <= (counter == 6'd33) ? S_IDLE : state;
             default : state_nxt <= S_IDLE;
         endcase
     end
