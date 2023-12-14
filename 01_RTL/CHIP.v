@@ -174,6 +174,7 @@ module CHIP #(                                                                  
         dojalr = 0;
         Isecall = 0;
         auipc_ctrl = 0;
+        ALUop = 2'b0;
         // will use ALU: lw,sw,B_type,R_type,I_type
         // ALUop=00:lw,sw 01:B_type 10:R_type 11:I_type
         case(opcode)
@@ -303,18 +304,21 @@ module CHIP #(                                                                  
     always @(*) begin
         case(state)
             S_IDLE: begin 
-                state_nxt <= (IsMUL) ? S_MUL_init: S_IDLE;
-                mul_valid_reg <= 1'b0;
+                state_nxt = (IsMUL) ? S_MUL_init: S_IDLE;
+                mul_valid_reg = 1'b0;
             end
             S_MUL_init: begin
-                state_nxt <= S_MUL;
-                mul_valid_reg <= 1'b1;
+                state_nxt = S_MUL;
+                mul_valid_reg = 1'b1;
             end
             S_MUL: begin
-                state_nxt <= (MULdone) ? S_IDLE: S_MUL;
-                mul_valid_reg <= 1'b0;
+                state_nxt = (MULdone) ? S_IDLE: S_MUL;
+                mul_valid_reg = 1'b0;
             end          
-            default : state_nxt <= state;
+            default : begin
+                state_nxt = state;
+                mul_valid_reg = 1'b0;
+            end
         endcase
     end
     always @(posedge i_clk or negedge i_rst_n) begin
@@ -527,6 +531,8 @@ module ALU(in1, in2, ALUctrl, result, zero, lessthan);
         case (ALUctrl)
             ADD: begin
                 result_reg = in1 + in2;
+                zero_reg = 1'b0;
+                lessthan_reg = 1'b0;
                 //overflow
                 if (in1[31] == in2[31]) begin
                     if (~in1[31] && result_reg[31]) result_reg = {1'b0,{31{1'b1}}};
@@ -535,6 +541,8 @@ module ALU(in1, in2, ALUctrl, result, zero, lessthan);
             end
             SUB: begin
                 result_reg = signed_in1 - signed_in2;
+                zero_reg = 1'b0;
+                lessthan_reg = 1'b0;
                 //overflow
                 if (in1[31] != in2[31]) begin
                     if (~in1[31] && in2[31] && result_reg[31]) result_reg = {1'b0,{31{1'b1}}};
@@ -547,12 +555,36 @@ module ALU(in1, in2, ALUctrl, result, zero, lessthan);
                 if(result_reg[31] == 1'b1) lessthan_reg = 1'b1;
                 else lessthan_reg = 1'b0;
             end
-            AND: result_reg = in1 & in2;
-            XOR: result_reg = in1 ^ in2;
-            SLT: result_reg = (signed_in1 < signed_in2)? 32'b1:32'b0;
-            SRA: result_reg = {{32{in1[31]}},in1} >> in2;
-            SLL: result_reg = in1 << in2;
-            default: result_reg = 32'b0;
+            AND: begin 
+                result_reg = in1 & in2;
+                zero_reg = 1'b0;
+                lessthan_reg = 1'b0;
+            end
+            XOR: begin
+                result_reg = in1 ^ in2;
+                zero_reg = 1'b0;
+                lessthan_reg = 1'b0;
+            end
+            SLT: begin 
+                result_reg = (signed_in1 < signed_in2)? 32'b1:32'b0;
+                zero_reg = 1'b0;
+                lessthan_reg = 1'b0;
+            end
+            SRA: begin 
+                result_reg = {{32{in1[31]}},in1} >> in2;
+                zero_reg = 1'b0;
+                lessthan_reg = 1'b0;
+            end
+            SLL: begin 
+                result_reg = in1 << in2;
+                zero_reg = 1'b0;
+                lessthan_reg = 1'b0;
+            end
+            default: begin 
+                result_reg = 32'b0;
+                zero_reg = 1'b0;
+                lessthan_reg = 1'b0;
+            end
         endcase
     end
 endmodule
