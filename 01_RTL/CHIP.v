@@ -695,17 +695,6 @@ module Cache#(
             input  [ADDR_W-1: 0] i_offset
     );
     Parameter BLOCK = 32;
-    assign o_cache_available = 1; // change this value to 1 if the cache is implemented
-
-    //------------------------------------------//
-    //          default connection              //
-    assign o_mem_cen = i_proc_cen;              //
-    assign o_mem_wen = i_proc_wen;              //
-    assign o_mem_addr = i_proc_addr;            //
-    assign o_mem_wdata = i_proc_wdata;          //
-    assign o_proc_rdata = i_mem_rdata[0+:BIT_W];//
-    assign o_proc_stall = i_mem_stall;          //
-    //------------------------------------------//
     //store
     reg [DATA_W-1:0] c_data [BLOCK-1:0][3:0];
     reg [22:0] c_tag [BLOCK-1:0];
@@ -718,23 +707,44 @@ module Cache#(
     //control
     wire tag_eq;
     wire hit;
-    //o_data
-    reg [DATA_W-1:0] o_proc_rdata_reg;
     // Todo: BONUS
-    parameter S_IDLE = 2'd0;
-    parameter S_WRITE = 2'd1;
-    parameter S_READ = 2'd2;
-    parameter S_WB = 2'd3;
-    parameter S_ALLO = 2'd4;
-    reg [1:0] state, state_nxt;
-    reg dirty, dirty_nxt;
-    reg hit, hit_nxt;
- 
+    parameter S_IDLE = 3'd0;
+    parameter S_WRITE = 3'd1;
+    parameter S_READ = 3'd2;
+    parameter S_WB = 3'd3;
+    parameter S_ALLO = 3'd4;
+    reg [2:0] state, state_nxt;
+
+    // (DONE) o_proc_stall assign to i_dmem_stall
+    // o_proc_finish : when "ecall", tell the processor all data is stored back to the main memory
+    // i_proc_finish : when "ecall", To tell the cache to store all data back to the main memory
+
+    //wire assignment    
+    assign o_cache_available = 1; // change this value to 1 if the cache is implemented
+
+    //------------------------------------------//
+    assign o_mem_cen = (state == S_ALLO || state == S_WB) ? 1 : 0;
+    assign o_mem_wen = (state == S_WB) ? 1 : 0;
+    assign o_mem_addr = i_proc_addr;            
+    assign o_mem_wdata = c_data[i_index];
+    assign o_proc_rdata = (hit && !dirty) ? c_data[i_index][i_offset] : 32'b0; //
+    assign o_proc_stall = (state != S_IDLE) ? 1:0;          
+    //------------------------------------------//
+    assign hit = tag_eq & c_valid[i_index];
+    assign tag_eq = (i_tag == c_tag[i_index]) ? 1: 0;
+
     // Sequential always block
     always @(posedge i_clk or negedge i_rst_n) begin
         if (!i_rst_n) begin
             state <= S_IDLE;
-            // tag,valid,dirty 
+            for (i = 0; i < BLOCK ; i++) begin
+                c_tag[i] <= 23'b0;
+                c_valid[i] <= 0;
+                c_dirty[i] <= 0;
+                for (j = 0; j < 4 ; j++) begin
+                    c_data[i][j] <= 32'b0;
+                end
+            end
         end
         else begin
             state <= state_nxt;
@@ -762,7 +772,7 @@ module Cache#(
                     state_nxt = S_IDLE;
                 end
                 else begin // !hit
-                    if(!dirty) begin
+                    if(!c_dirty[i_index]) begin
                         state_nxt = S_ALLO;
                     end
                     else begin // dirty == 1
@@ -777,7 +787,7 @@ module Cache#(
                     state_nxt = S_IDLE;
                 end
                 else begin // !hit
-                    if(!dirty) begin
+                    if(!c_dirty[i_index]) begin
                         state_nxt = S_ALLO;
                     end
                     else begin // dirty == 1
@@ -812,8 +822,32 @@ module Cache#(
         endcase
     end
 
-// o_proc_stall assign to i_dmem_stall
-// o_proc_finish : cache state !s_idle
-// i_proc_finish : when "ecall", input from chip
-
+    //Combinational part
+    //translate input address
+    always @(*) begin
+        i_tag = i_proc_addr[31:9];
+        i_index = i_proc_addr[8:4];
+        i_offset = i_proc_addr[3:2];
+    end
+    //valid & dirty
+    always @(*) begin
+        case (state)
+            S_WRITE:begin
+                if(hit)begin
+                    c_dirty[i_index] = 1;
+                end
+            end
+            S_READ:begin
+                
+            end
+            S_WB:begin
+                c_dirty[i_index] = 0;
+            end
+            S_ALLO:begin
+                c_tag[i_index] = i_tag;
+                c_valid[i_index] = 1;
+            end
+            default: 
+        endcase
+    end
 endmodule
