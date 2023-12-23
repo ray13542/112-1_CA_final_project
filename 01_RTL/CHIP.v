@@ -708,5 +708,99 @@ module Cache#(
     //------------------------------------------//
 
     // Todo: BONUS
+    parameter S_IDLE = 2'd0;
+    parameter S_WRITE = 2'd1;
+    parameter S_READ = 2'd2;
+    parameter S_WB = 2'd3;
+    parameter S_ALLO = 2'd4;
+    reg [1:0] state, state_nxt;
+    reg dirty, dirty_nxt;
+    reg hit, hit_nxt;
+ 
+    // Sequential always block
+    always @(posedge i_clk or negedge i_rst_n) begin
+        if (!i_rst_n) begin
+            state <= S_IDLE;
+            // tag,valid,dirty 
+        end
+        else begin
+            state <= state_nxt;
+        end
+    end
+
+    // FSM
+    always @(*) begin
+        case(state)
+            S_IDLE : begin
+                if(i_proc_cen && i_proc_wen) begin
+                    state_nxt = S_WRITE;
+                end
+                else if(i_proc_cen && !i_proc_wen) begin
+                    state_nxt = S_READ;
+                end
+                else begin
+                    state_nxt = state;
+                end
+            end
+
+            S_WRITE : begin
+                state_nxt = S_WRITE;
+                if(hit) begin
+                    state_nxt = S_IDLE;
+                end
+                else begin // !hit
+                    if(!dirty) begin
+                        state_nxt = S_ALLO;
+                    end
+                    else begin // dirty == 1
+                        state_nxt = S_WB;
+                    end
+                end
+            end
+
+            S_READ : begin
+                state_nxt = S_READ;
+                if(hit) begin
+                    state_nxt = S_IDLE;
+                end
+                else begin // !hit
+                    if(!dirty) begin
+                        state_nxt = S_ALLO;
+                    end
+                    else begin // dirty == 1
+                        state_nxt = S_WB;
+                    end
+                end
+            end
+
+            S_WB : begin
+                state_nxt = S_WB;
+                if(i_proc_wen && !i_mem_stall) begin
+                    state_nxt = S_WRITE;
+                end
+                else if(!i_mem_stall) begin
+                    state_nxt = S_ALLO;
+                end
+            end
+
+            S_ALLO: begin
+                state_nxt = S_ALLO;
+                if(!i_mem_stall) begin
+                    state_nxt = S_READ;
+                end
+                else begin
+                    state_nxt = S_ALLO;
+                end
+            end
+
+            default: begin
+                    state_nxt = S_IDLE;
+            end
+        endcase
+    end
+
+// o_proc_stall assign to i_dmem_stall
+// o_proc_finish : cache state !s_idle
+// i_proc_finish : when "ecall", input from chip
 
 endmodule
