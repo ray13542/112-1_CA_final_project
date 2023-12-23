@@ -99,7 +99,8 @@ module CHIP #(                                                                  
     //assignment for mul
     assign mul_valid = mul_valid_reg;
     //assignment for finish
-    assign o_finish = Isecall;
+    // assign o_finish = Isecall;
+    assign o_finish = (i_cache_finish)?1:0;
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
 // Submoddules
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -784,10 +785,10 @@ module Cache#(
                     state_nxt = S_IDLE;
                 end
                 else begin // !hit
-                    if(!c_dirty[i_index]) begin // dirty
+                    if(!c_dirty[i_index]) begin // !dirty
                         state_nxt = S_ALLO;
                     end
-                    else begin // !dirty
+                    else begin // dirty
                         state_nxt = S_WB;
                     end
                 end
@@ -799,10 +800,10 @@ module Cache#(
                     state_nxt = S_IDLE;
                 end
                 else begin // !hit
-                    if(!c_dirty[i_index]) begin
+                    if(!c_dirty[i_index]) begin // !dirty
                         state_nxt = S_ALLO;
                     end
-                    else begin // dirty == 1
+                    else begin // dirty
                         state_nxt = S_WB;
                     end
                 end
@@ -828,6 +829,9 @@ module Cache#(
             S_ALLO: begin
                 state_nxt = S_ALLO;
                 if(!i_mem_stall && o_mem_wen) begin
+                    state_nxt = S_WRITE;
+                end
+                else if(!i_mem_stall && !o_mem_wen) begin
                     state_nxt = S_READ;
                 end
                 else begin
@@ -847,7 +851,7 @@ module Cache#(
                 end
             end
             default: begin
-                    state_nxt = S_IDLE;
+                    state_nxt = state;
             end
         endcase
     end
