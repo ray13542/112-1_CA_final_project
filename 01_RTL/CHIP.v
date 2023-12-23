@@ -716,9 +716,8 @@ module Cache#(
     reg [2:0] state, state_nxt;
 
     // (DONE) o_proc_stall assign to i_dmem_stall
-    // o_proc_finish : when "ecall", tell the processor all data is stored back to the main memory
-    // i_proc_finish : when "ecall", To tell the cache to store all data back to the main memory
-
+    // i_proc_finish(To tell the cache to store all data back to the main memory) : cache state !S_IDLE
+    // o_cache_finish(To tell the processor all data is stored back to the main memory) : when "ecall", output from cache
     //wire assignment    
     assign o_cache_available = 1; // change this value to 1 if the cache is implemented
 
@@ -772,10 +771,10 @@ module Cache#(
                     state_nxt = S_IDLE;
                 end
                 else begin // !hit
-                    if(!c_dirty[i_index]) begin
+                    if(!c_dirty[i_index]) begin // dirty
                         state_nxt = S_ALLO;
                     end
-                    else begin // dirty == 1
+                    else begin // !dirty
                         state_nxt = S_WB;
                     end
                 end
@@ -798,17 +797,20 @@ module Cache#(
 
             S_WB : begin
                 state_nxt = S_WB;
-                if(i_proc_wen && !i_mem_stall) begin
+                /* if(i_proc_wen && !i_mem_stall) begin
                     state_nxt = S_WRITE;
-                end
-                else if(!i_mem_stall) begin
+                end */
+                if(!i_mem_stall && !c_dirty[i_index]) begin
                     state_nxt = S_ALLO;
+                end
+                else begin
+                    state_nxt = S_WB;
                 end
             end
 
             S_ALLO: begin
                 state_nxt = S_ALLO;
-                if(!i_mem_stall) begin
+                if(!i_mem_stall && o_mem_wen) begin
                     state_nxt = S_READ;
                 end
                 else begin
