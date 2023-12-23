@@ -662,8 +662,8 @@ module Cache#(
         // others
             input  [ADDR_W-1: 0] i_offset
     );
-
-    assign o_cache_available = 0; // change this value to 1 if the cache is implemented
+    Parameter BLOCK = 32;
+    assign o_cache_available = 1; // change this value to 1 if the cache is implemented
 
     //------------------------------------------//
     //          default connection              //
@@ -674,7 +674,56 @@ module Cache#(
     assign o_proc_rdata = i_mem_rdata[0+:BIT_W];//
     assign o_proc_stall = i_mem_stall;          //
     //------------------------------------------//
-
+    //store
+    reg [DATA_W-1:0] c_data [BLOCK-1:0][3:0];
+    reg [22:0] c_tag [BLOCK-1:0];
+    reg c_valid [Block-1:0];
+    reg c_dirty [Block-1:0];
+    //address
+    reg [22:0] i_tag;
+    reg [4:0] i_index;
+    reg [1:0] i_offset;
+    //control
+    wire tag_eq;
+    wire hit;
+    //o_data
+    reg [DATA_W-1:0] o_proc_rdata_reg;
     // Todo: BONUS
-
+    assign hit = tag_eq & c_valid[i_index];
+    assign tag_eq = (i_tag == c_tag[i_index]) ? 1: 0;
+    //translate input address
+    always @(*) begin
+        i_tag = i_proc_addr[31:9];
+        i_index = i_proc_addr[8:4];
+        i_offset = i_proc_addr[3:2];
+    end
+    //write & read
+    always @(*) begin
+        case (state)
+            S_WRITE:begin
+                if(hit && !c_dirty[i_index])begin
+                    c_data[i_index][i_offset] = i_proc_wdata;
+                    c_dirty[i_index] = 1;
+                end
+            end
+            S_READ:begin
+                if(hit && !c_dirty[i_index])begin
+                    o_proc_rdata_reg = c_data[i_index][i_offset];
+                end
+            end
+            S_WB:begin
+                c_dirty[i_index] = 0;
+                //mem_wen, mem_cen
+                //o_mem_addr_reg
+                o_mem_wdata_reg = c_data[i_index][i_offset];
+            end
+            S_ALLO:begin
+                //o_mem_addr_reg
+                //o_mem_cen
+                c_data[i_index]= i_mem_rdata; //128bit
+                c_tag[i_index] = i_tag;
+            end
+            default: 
+        endcase
+    end
 endmodule

@@ -44,7 +44,7 @@ Todo:
         store:      wdata = mem_rdata
         auipc:      wdata = PC + {imm, 12'b0}
 
-
+    
         
     
     *always block
