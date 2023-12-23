@@ -11,16 +11,16 @@ if __name__ == '__main__':
     # Modify your test pattern here
     a = 7
     b = 4
-    c = 1
+    c = 8
     d = 4
 
-    with open('../00_TB/Pattern/I0/mem_D.dat', 'w') as f_data:
+    with open('00_TB\Pattern\I0\mem_D.dat', 'w') as f_data:
         f_data.write(f"{a:08x}\n")
         f_data.write(f"{b:08x}\n")
         f_data.write(f"{c:08x}\n")
         f_data.write(f"{d:08x}\n")
 
-    with open('../00_TB/Pattern/I0/golden.dat', 'w') as f_ans:
+    with open('00_TB\Pattern\I0\golden.dat', 'w') as f_ans:
         f_ans.write('{:0>8x}\n'.format(toHex(a)))
         f_ans.write('{:0>8x}\n'.format(toHex(b)))
         f_ans.write('{:0>8x}\n'.format(toHex(c)))

@@ -174,6 +174,7 @@ module CHIP #(                                                                  
         dojalr = 0;
         Isecall = 0;
         auipc_ctrl = 0;
+        ALUop = 2'b0;
         // will use ALU: lw,sw,B_type,R_type,I_type
         // ALUop=00:lw,sw 01:B_type 10:R_type 11:I_type
         case(opcode)
@@ -303,18 +304,21 @@ module CHIP #(                                                                  
     always @(*) begin
         case(state)
             S_IDLE: begin 
-                state_nxt <= (IsMUL) ? S_MUL_init: S_IDLE;
-                mul_valid_reg <= 1'b0;
+                state_nxt = (IsMUL) ? S_MUL_init: S_IDLE;
+                mul_valid_reg = 1'b0;
             end
             S_MUL_init: begin
-                state_nxt <= S_MUL;
-                mul_valid_reg <= 1'b1;
+                state_nxt = S_MUL;
+                mul_valid_reg = 1'b1;
             end
             S_MUL: begin
-                state_nxt <= (MULdone) ? S_IDLE: S_MUL;
-                mul_valid_reg <= 1'b0;
+                state_nxt = (MULdone) ? S_IDLE: S_MUL;
+                mul_valid_reg = 1'b0;
             end          
-            default : state_nxt <= state;
+            default : begin
+                state_nxt = state;
+                mul_valid_reg = 1'b0;
+            end
         endcase
     end
     always @(posedge i_clk or negedge i_rst_n) begin
@@ -527,6 +531,8 @@ module ALU(in1, in2, ALUctrl, result, zero, lessthan);
         case (ALUctrl)
             ADD: begin
                 result_reg = in1 + in2;
+                zero_reg = 1'b0;
+                lessthan_reg = 1'b0;
                 //overflow
                 if (in1[31] == in2[31]) begin
                     if (~in1[31] && result_reg[31]) result_reg = {1'b0,{31{1'b1}}};
@@ -535,6 +541,8 @@ module ALU(in1, in2, ALUctrl, result, zero, lessthan);
             end
             SUB: begin
                 result_reg = signed_in1 - signed_in2;
+                zero_reg = 1'b0;
+                lessthan_reg = 1'b0;
                 //overflow
                 if (in1[31] != in2[31]) begin
                     if (~in1[31] && in2[31] && result_reg[31]) result_reg = {1'b0,{31{1'b1}}};
@@ -547,12 +555,36 @@ module ALU(in1, in2, ALUctrl, result, zero, lessthan);
                 if(result_reg[31] == 1'b1) lessthan_reg = 1'b1;
                 else lessthan_reg = 1'b0;
             end
-            AND: result_reg = in1 & in2;
-            XOR: result_reg = in1 ^ in2;
-            SLT: result_reg = (signed_in1 < signed_in2)? 32'b1:32'b0;
-            SRA: result_reg = {{32{in1[31]}},in1} >> in2;
-            SLL: result_reg = in1 << in2;
-            default: result_reg = 32'b0;
+            AND: begin 
+                result_reg = in1 & in2;
+                zero_reg = 1'b0;
+                lessthan_reg = 1'b0;
+            end
+            XOR: begin
+                result_reg = in1 ^ in2;
+                zero_reg = 1'b0;
+                lessthan_reg = 1'b0;
+            end
+            SLT: begin 
+                result_reg = (signed_in1 < signed_in2)? 32'b1:32'b0;
+                zero_reg = 1'b0;
+                lessthan_reg = 1'b0;
+            end
+            SRA: begin 
+                result_reg = {{32{in1[31]}},in1} >> in2;
+                zero_reg = 1'b0;
+                lessthan_reg = 1'b0;
+            end
+            SLL: begin 
+                result_reg = in1 << in2;
+                zero_reg = 1'b0;
+                lessthan_reg = 1'b0;
+            end
+            default: begin 
+                result_reg = 32'b0;
+                zero_reg = 1'b0;
+                lessthan_reg = 1'b0;
+            end
         endcase
     end
 endmodule
@@ -689,41 +721,99 @@ module Cache#(
     //o_data
     reg [DATA_W-1:0] o_proc_rdata_reg;
     // Todo: BONUS
-    assign hit = tag_eq & c_valid[i_index];
-    assign tag_eq = (i_tag == c_tag[i_index]) ? 1: 0;
-    //translate input address
-    always @(*) begin
-        i_tag = i_proc_addr[31:9];
-        i_index = i_proc_addr[8:4];
-        i_offset = i_proc_addr[3:2];
+    parameter S_IDLE = 2'd0;
+    parameter S_WRITE = 2'd1;
+    parameter S_READ = 2'd2;
+    parameter S_WB = 2'd3;
+    parameter S_ALLO = 2'd4;
+    reg [1:0] state, state_nxt;
+    reg dirty, dirty_nxt;
+    reg hit, hit_nxt;
+ 
+    // Sequential always block
+    always @(posedge i_clk or negedge i_rst_n) begin
+        if (!i_rst_n) begin
+            state <= S_IDLE;
+            // tag,valid,dirty 
+        end
+        else begin
+            state <= state_nxt;
+        end
     end
-    //write & read
+
+    // FSM
     always @(*) begin
-        case (state)
-            S_WRITE:begin
-                if(hit && !c_dirty[i_index])begin
-                    c_data[i_index][i_offset] = i_proc_wdata;
-                    c_dirty[i_index] = 1;
+        case(state)
+            S_IDLE : begin
+                if(i_proc_cen && i_proc_wen) begin
+                    state_nxt = S_WRITE;
+                end
+                else if(i_proc_cen && !i_proc_wen) begin
+                    state_nxt = S_READ;
+                end
+                else begin
+                    state_nxt = state;
                 end
             end
-            S_READ:begin
-                if(hit && !c_dirty[i_index])begin
-                    o_proc_rdata_reg = c_data[i_index][i_offset];
+
+            S_WRITE : begin
+                state_nxt = S_WRITE;
+                if(hit) begin
+                    state_nxt = S_IDLE;
+                end
+                else begin // !hit
+                    if(!dirty) begin
+                        state_nxt = S_ALLO;
+                    end
+                    else begin // dirty == 1
+                        state_nxt = S_WB;
+                    end
                 end
             end
-            S_WB:begin
-                c_dirty[i_index] = 0;
-                //mem_wen, mem_cen
-                //o_mem_addr_reg
-                o_mem_wdata_reg = c_data[i_index][i_offset];
+
+            S_READ : begin
+                state_nxt = S_READ;
+                if(hit) begin
+                    state_nxt = S_IDLE;
+                end
+                else begin // !hit
+                    if(!dirty) begin
+                        state_nxt = S_ALLO;
+                    end
+                    else begin // dirty == 1
+                        state_nxt = S_WB;
+                    end
+                end
             end
-            S_ALLO:begin
-                //o_mem_addr_reg
-                //o_mem_cen
-                c_data[i_index]= i_mem_rdata; //128bit
-                c_tag[i_index] = i_tag;
+
+            S_WB : begin
+                state_nxt = S_WB;
+                if(i_proc_wen && !i_mem_stall) begin
+                    state_nxt = S_WRITE;
+                end
+                else if(!i_mem_stall) begin
+                    state_nxt = S_ALLO;
+                end
             end
-            default: 
+
+            S_ALLO: begin
+                state_nxt = S_ALLO;
+                if(!i_mem_stall) begin
+                    state_nxt = S_READ;
+                end
+                else begin
+                    state_nxt = S_ALLO;
+                end
+            end
+
+            default: begin
+                    state_nxt = S_IDLE;
+            end
         endcase
     end
+
+// o_proc_stall assign to i_dmem_stall
+// o_proc_finish : cache state !s_idle
+// i_proc_finish : when "ecall", input from chip
+
 endmodule
