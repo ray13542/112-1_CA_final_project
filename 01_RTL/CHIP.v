@@ -694,16 +694,16 @@ module Cache#(
         // others
             input  [ADDR_W-1: 0] i_offset
     );
-    Parameter BLOCK = 32;
+    parameter BLOCK = 32;
     //store
     reg [DATA_W-1:0] c_data [BLOCK-1:0][3:0];
     reg [22:0] c_tag [BLOCK-1:0];
     reg c_valid [Block-1:0];
     reg c_dirty [Block-1:0];
     //address
-    reg [22:0] i_tag;
-    reg [4:0] i_index;
-    reg [1:0] i_offset;
+    wire [22:0] i_tag;
+    wire [4:0] i_index;
+    wire [1:0] i_offset;
     //control
     wire tag_eq;
     wire hit;
@@ -713,22 +713,31 @@ module Cache#(
     parameter S_READ = 3'd2;
     parameter S_WB = 3'd3;
     parameter S_ALLO = 3'd4;
+    parameter S_FINISH = 3'5;
     reg [2:0] state, state_nxt;
+    reg [4:0] count;
 
-    // (DONE) o_proc_stall assign to i_dmem_stall
-    // i_proc_finish(To tell the cache to store all data back to the main memory) : cache state !S_IDLE
+    // (DONE) o_proc_stall: 0 if not S_IDLE
+    // (DONE) i_proc_finish(To tell the cache to store all data back to the main memory) : when "ecall", output from chip
     // o_cache_finish(To tell the processor all data is stored back to the main memory) : when "ecall", output from cache
-    //wire assignment    
+    
+    //wire assignment
     assign o_cache_available = 1; // change this value to 1 if the cache is implemented
 
     //------------------------------------------//
     assign o_mem_cen = (state == S_ALLO || state == S_WB) ? 1 : 0;
     assign o_mem_wen = (state == S_WB) ? 1 : 0;
-    assign o_mem_addr = i_proc_addr;            
-    assign o_mem_wdata = c_data[i_index];
-    assign o_proc_rdata = (hit && !dirty) ? c_data[i_index][i_offset] : 32'b0; //
-    assign o_proc_stall = (state != S_IDLE) ? 1:0;          
+    // In normal WB, address = old block; In finish WB, address = all block indexed by count; Otherwire(In ALLO), address = new block
+    assign o_mem_addr = (state == S_WB)? ((i_proc_finish)? {c_tag[count], i_proc_addr[8:0]} : {c_tag[i_index], i_proc_addr[8:0]}) ? i_proc_addr; 
+    // In normal WB, data = old block; In finish WB, data = all block indexed by count
+    assign o_mem_wdata = (i_proc_finish) ? c_data[count] : c_data[i_index];
+    // In S_Read, read data is cache data if hit
+    assign o_proc_rdata = (c_valid[i_index] && hit) ? c_data[i_index][i_offset] : 32'b0;
+    assign o_proc_stall = (state != S_IDLE) ? 1:0;
     //------------------------------------------//
+    assign i_tag = i_proc_addr[31:9];
+    assign i_index = i_proc_addr[8:4];
+    assign i_offset = i_proc_addr[3:2];
     assign hit = tag_eq & c_valid[i_index];
     assign tag_eq = (i_tag == c_tag[i_index]) ? 1: 0;
 
@@ -743,6 +752,7 @@ module Cache#(
                 for (j = 0; j < 4 ; j++) begin
                     c_data[i][j] <= 32'b0;
                 end
+                count <= 5'b0;
             end
         end
         else begin
@@ -759,6 +769,9 @@ module Cache#(
                 end
                 else if(i_proc_cen && !i_proc_wen) begin
                     state_nxt = S_READ;
+                end
+                else if(i_proc_finish) begin
+                    state_nxt = S_FINISH;
                 end
                 else begin
                     state_nxt = state;
@@ -803,6 +816,10 @@ module Cache#(
                 if(!i_mem_stall && !c_dirty[i_index]) begin
                     state_nxt = S_ALLO;
                 end
+                else if(!i_mem_stall && i_proc_finish) begin //Assume i_proc_finish would always ON during ecall
+                    state_nxt = S_FINISH;
+                end
+
                 else begin
                     state_nxt = S_WB;
                 end
@@ -818,29 +835,41 @@ module Cache#(
                 end
             end
 
+            S_FINISH: begin
+                if (count == 5'd31) begin //browse all blocks
+                    state_nxt = S_IDLE;
+                end
+                else if(c_valid[count]) begin //valid = 1 means need to write back
+                    state_nxt = S_WB;
+                end
+                else begin
+                    state_nxt = S_FINISH;
+                end
+            end
             default: begin
                     state_nxt = S_IDLE;
             end
         endcase
     end
+    //counter for finish
+    always @(posedge i_clk) begin
+        if(state == S_FINISH) count <= count + 5'd1;
+        else count <= 5'd0;
+    end
 
     //Combinational part
-    //translate input address
-    always @(*) begin
-        i_tag = i_proc_addr[31:9];
-        i_index = i_proc_addr[8:4];
-        i_offset = i_proc_addr[3:2];
-    end
     //valid & dirty
     always @(*) begin
         case (state)
             S_WRITE:begin
                 if(hit)begin
                     c_dirty[i_index] = 1;
+                    //write back data to chip if hit
+                    c_data[i_index][i_offset] = i_proc_wdata;
                 end
             end
             S_READ:begin
-                
+                //Assignment of data & addr are in the assignment part 
             end
             S_WB:begin
                 c_dirty[i_index] = 0;
@@ -848,6 +877,10 @@ module Cache#(
             S_ALLO:begin
                 c_tag[i_index] = i_tag;
                 c_valid[i_index] = 1;
+                c_data[i_index] = i_mem_rdata;
+            end
+            S_FINISH:begin
+                //Assignment of data & addr are in the assignment part 
             end
             default: 
         endcase
