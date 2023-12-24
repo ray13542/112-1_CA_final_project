@@ -699,11 +699,12 @@ module Cache#(
     parameter BLOCK = 32;
     //store
     reg [4*BIT_W-1:0] c_data [BLOCK-1:0];
-    wire [BIT_W-1:0] c_data_sep [3:0];
+    //wire [BIT_W-1:0] c_data_sep [3:0];
     reg [22:0] c_tag [BLOCK-1:0];
     reg c_valid [BLOCK-1:0];
     reg c_dirty [BLOCK-1:0];
     //address
+    wire [ADDR_W-1:0] real_addr;
     wire [22:0] i_tag;
     wire [4:0] i_index;
     wire [1:0] offset;
@@ -731,23 +732,25 @@ module Cache#(
     assign o_mem_cen = (state == S_ALLO || state == S_WB) ? 1 : 0;
     assign o_mem_wen = (state == S_WB) ? 1 : 0;
     // In normal WB, address = old block; In finish WB, address = all block indexed by count; Otherwire(In ALLO), address = new block
-    assign o_mem_addr = (state == S_WB)? ((i_proc_finish)? {c_tag[count[4:0]], count[4:0], 4'b0} : {c_tag[i_index], i_index, 4'b0}) : i_proc_addr;
+    assign o_mem_addr = (state == S_WB)? {c_tag[i_index], i_index, 4'b0}+i_offset : i_proc_addr;
     // In normal WB, data = old block; In finish WB, data = all block indexed by count
-    assign o_mem_wdata = (i_proc_finish) ? c_data[count[4:0]] : c_data[i_index];
+    assign o_mem_wdata = c_data[i_index];
     // In S_Read, read data is cache data if hit&valid
-    assign o_proc_rdata = (c_valid[i_index] && hit) ? c_data_sep[offset] : 32'b0;
+    //assign o_proc_rdata = (c_valid[i_index] && hit) ? c_data[i_index][ADDR_W*offset +: ADDR_W] : 32'b0;
+    assign o_proc_rdata = c_data[i_index][ADDR_W*offset +: ADDR_W];
     assign o_proc_stall = (state_nxt != S_IDLE) ? 1:0;
     assign o_cache_finish = (count == 6'd32) ? 1:0;
     //------------------------------------------//
-    assign i_tag = i_proc_addr[31:9];
-    assign i_index = i_proc_addr[8:4];
-    assign offset = i_proc_addr[3:2];
+    assign real_addr = i_proc_addr - i_offset;
+    assign i_tag = real_addr[31:9];
+    assign i_index = (i_proc_finish)? count[4:0] : real_addr[8:4];
+    assign offset = real_addr[3:2];
     assign hit = tag_eq & c_valid[i_index];
     assign tag_eq = (i_tag == c_tag[i_index]) ? 1: 0;
-    assign c_data_sep[0] = c_data[i_index][BIT_W-1:0];
+    /*assign c_data_sep[0] = c_data[i_index][BIT_W-1:0];
     assign c_data_sep[1] = c_data[i_index][2*BIT_W-1:BIT_W];
     assign c_data_sep[2] = c_data[i_index][3*BIT_W-1:2*BIT_W];
-    assign c_data_sep[3] = c_data[i_index][4*BIT_W-1:3*BIT_W];
+    assign c_data_sep[3] = c_data[i_index][4*BIT_W-1:3*BIT_W];*/
 
     integer i;
     // Sequential always block
@@ -834,10 +837,10 @@ module Cache#(
 
             S_ALLO: begin
                 state_nxt = S_ALLO;
-                if(!i_mem_stall && o_mem_wen) begin
+                if(!i_mem_stall && i_proc_wen) begin
                     state_nxt = S_WRITE;
                 end
-                else if(!i_mem_stall && !o_mem_wen) begin
+                else if(!i_mem_stall && !i_proc_wen) begin
                     state_nxt = S_READ;
                 end
                 else begin
@@ -846,10 +849,10 @@ module Cache#(
             end
 
             S_FINISH: begin
-                if (count == 6'd32) begin //browse all blocks
+                if (count == 6'd32 && !i_mem_stall) begin //browse all blocks
                     state_nxt = S_IDLE;
                 end
-                else if(c_valid[count[4:0]]) begin //valid = 1 means need to write back
+                else if(c_dirty[count[4:0]]) begin //valid = 1 means need to write back
                     state_nxt = S_WB;
                 end
                 else begin
@@ -864,7 +867,7 @@ module Cache#(
     //counter for finish
     always @(posedge i_clk) begin
         if(i_proc_finish) begin
-            if (state == S_FINISH) begin
+            if (state == S_FINISH && !c_dirty[i_index]) begin
                 count <= count + 6'd1;
             end
             else 
@@ -881,12 +884,7 @@ module Cache#(
                 if(hit)begin
                     c_dirty[i_index] = 1;
                     //write back data to chip if hit
-                    case (offset)
-                        2'd0:  c_data[i_index] = {c_data[i_index][4*BIT_W-1:BIT_W], i_proc_wdata};
-                        2'd1:  c_data[i_index] = {c_data[i_index][4*BIT_W-1:2*BIT_W], i_proc_wdata, c_data[i_index][ BIT_W-1:0]};
-                        2'd2:  c_data[i_index] = {c_data[i_index][4*BIT_W-1:3*BIT_W], i_proc_wdata, c_data[i_index][2*BIT_W-1:0]};
-                        2'd3:  c_data[i_index] = {i_proc_wdata, c_data[i_index][3*BIT_W-1:0]};
-                    endcase
+                    c_data[i_index][ADDR_W*offset +: ADDR_W] = i_proc_wdata;
                 end
             end
             S_READ:begin
