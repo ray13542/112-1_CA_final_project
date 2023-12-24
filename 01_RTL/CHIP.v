@@ -694,18 +694,19 @@ module Cache#(
             input i_mem_stall,
             output o_cache_available,
         // others
-            input  [ADDR_W-1: 0] i_offset
+            input [ADDR_W-1: 0] i_offset
     );
     parameter BLOCK = 32;
     //store
-    reg [DATA_W-1:0] c_data [BLOCK-1:0][3:0];
+    reg [4*BIT_W-1:0] c_data [BLOCK-1:0];
+    wire [BIT_W-1:0] c_data_sep [3:0];
     reg [22:0] c_tag [BLOCK-1:0];
-    reg c_valid [Block-1:0];
-    reg c_dirty [Block-1:0];
+    reg c_valid [BLOCK-1:0];
+    reg c_dirty [BLOCK-1:0];
     //address
     wire [22:0] i_tag;
     wire [4:0] i_index;
-    wire [1:0] i_offset;
+    wire [1:0] offset;
     //control
     wire tag_eq;
     wire hit;
@@ -715,7 +716,7 @@ module Cache#(
     parameter S_READ = 3'd2;
     parameter S_WB = 3'd3;
     parameter S_ALLO = 3'd4;
-    parameter S_FINISH = 3'5;
+    parameter S_FINISH = 3'd5;
     reg [2:0] state, state_nxt;
     reg [5:0] count;
 
@@ -730,31 +731,34 @@ module Cache#(
     assign o_mem_cen = (state == S_ALLO || state == S_WB) ? 1 : 0;
     assign o_mem_wen = (state == S_WB) ? 1 : 0;
     // In normal WB, address = old block; In finish WB, address = all block indexed by count; Otherwire(In ALLO), address = new block
-    assign o_mem_addr = (state == S_WB)? ((i_proc_finish)? {c_tag[count[4:0]], i_proc_addr[8:0]} : {c_tag[i_index], i_proc_addr[8:0]}) ? i_proc_addr; 
+    assign o_mem_addr = (state == S_WB)? ((i_proc_finish)? {c_tag[count[4:0]], i_proc_addr[8:0]} : {c_tag[i_index], i_proc_addr[8:0]}) : i_proc_addr;
     // In normal WB, data = old block; In finish WB, data = all block indexed by [4:0
     assign o_mem_wdata = (i_proc_finish) ? c_data[count[4:0]] : c_data[i_index];
     // In S_Read, read data is cache data if hit
-    assign o_proc_rdata = (c_valid[i_index] && hit) ? c_data[i_index][i_offset] : 32'b0;
+    assign o_proc_rdata = (c_valid[i_index] && hit) ? c_data[i_index][offset] : 32'b0;
     assign o_proc_stall = (state != S_IDLE) ? 1:0;
     assign o_proc_finish = (count == 6'd32) ? 1:0;
     //------------------------------------------//
     assign i_tag = i_proc_addr[31:9];
     assign i_index = i_proc_addr[8:4];
-    assign i_offset = i_proc_addr[3:2];
+    assign offset = i_proc_addr[3:2];
     assign hit = tag_eq & c_valid[i_index];
     assign tag_eq = (i_tag == c_tag[i_index]) ? 1: 0;
+    assign c_data_sep[0] = c_data[i_index][BIT_W-1:0];
+    assign c_data_sep[1] = c_data[i_index][2*BIT_W-1:BIT_W];
+    assign c_data_sep[2] = c_data[i_index][3*BIT_W-1:2*BIT_W];
+    assign c_data_sep[3] = c_data[i_index][4*BIT_W-1:3*BIT_W];
 
+    integer i;
     // Sequential always block
     always @(posedge i_clk or negedge i_rst_n) begin
         if (!i_rst_n) begin
             state <= S_IDLE;
-            for (i = 0; i < BLOCK ; i++) begin
+            for (i = 0; i < BLOCK ; i = i + 1) begin
                 c_tag[i] <= 23'b0;
                 c_valid[i] <= 0;
                 c_dirty[i] <= 0;
-                for (j = 0; j < 4 ; j++) begin
-                    c_data[i][j] <= 32'b0;
-                end
+                c_data[i] <= 128'b0;
                 count <= 6'b0;
             end
         end
@@ -871,7 +875,12 @@ module Cache#(
                 if(hit)begin
                     c_dirty[i_index] = 1;
                     //write back data to chip if hit
-                    c_data[i_index][i_offset] = i_proc_wdata;
+                    case (offset)
+                        2'd0:  c_data[i_index] = {c_data[i_index][4*BIT_W-1:BIT_W], i_proc_wdata};
+                        2'd1:  c_data[i_index] = {c_data[i_index][4*BIT_W-1:2*BIT_W], i_proc_wdata, c_data[i_index][ BIT_W-1:0]};
+                        2'd2:  c_data[i_index] = {c_data[i_index][4*BIT_W-1:3*BIT_W], i_proc_wdata, c_data[i_index][2*BIT_W-1:0]};
+                        2'd3:  c_data[i_index] = {i_proc_wdata, c_data[i_index][3*BIT_W-1:0]};
+                    endcase
                 end
             end
             S_READ:begin
@@ -888,7 +897,9 @@ module Cache#(
             S_FINISH:begin
                 //Assignment of data & addr are in the assignment part 
             end
-            default: 
+            default: begin
+
+            end
         endcase
     end
 endmodule
