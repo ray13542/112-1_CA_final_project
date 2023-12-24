@@ -101,6 +101,7 @@ module CHIP #(                                                                  
     //assignment for finish
     // assign o_finish = Isecall;
     assign o_finish = (i_cache_finish)?1:0;
+    assign o_proc_finish = Isecall;
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
 // Submoddules
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -716,7 +717,7 @@ module Cache#(
     parameter S_ALLO = 3'd4;
     parameter S_FINISH = 3'5;
     reg [2:0] state, state_nxt;
-    reg [4:0] count;
+    reg [5:0] count;
 
     // (DONE) o_proc_stall: 0 if not S_IDLE
     // (DONE) i_proc_finish(To tell the cache to store all data back to the main memory) : when "ecall", output from chip
@@ -729,12 +730,13 @@ module Cache#(
     assign o_mem_cen = (state == S_ALLO || state == S_WB) ? 1 : 0;
     assign o_mem_wen = (state == S_WB) ? 1 : 0;
     // In normal WB, address = old block; In finish WB, address = all block indexed by count; Otherwire(In ALLO), address = new block
-    assign o_mem_addr = (state == S_WB)? ((i_proc_finish)? {c_tag[count], i_proc_addr[8:0]} : {c_tag[i_index], i_proc_addr[8:0]}) ? i_proc_addr; 
-    // In normal WB, data = old block; In finish WB, data = all block indexed by count
-    assign o_mem_wdata = (i_proc_finish) ? c_data[count] : c_data[i_index];
+    assign o_mem_addr = (state == S_WB)? ((i_proc_finish)? {c_tag[count[4:0]], i_proc_addr[8:0]} : {c_tag[i_index], i_proc_addr[8:0]}) ? i_proc_addr; 
+    // In normal WB, data = old block; In finish WB, data = all block indexed by [4:0
+    assign o_mem_wdata = (i_proc_finish) ? c_data[count[4:0]] : c_data[i_index];
     // In S_Read, read data is cache data if hit
     assign o_proc_rdata = (c_valid[i_index] && hit) ? c_data[i_index][i_offset] : 32'b0;
     assign o_proc_stall = (state != S_IDLE) ? 1:0;
+    assign o_proc_finish = (count == 6'd32) ? 1:0;
     //------------------------------------------//
     assign i_tag = i_proc_addr[31:9];
     assign i_index = i_proc_addr[8:4];
@@ -753,7 +755,7 @@ module Cache#(
                 for (j = 0; j < 4 ; j++) begin
                     c_data[i][j] <= 32'b0;
                 end
-                count <= 5'b0;
+                count <= 6'b0;
             end
         end
         else begin
@@ -840,10 +842,10 @@ module Cache#(
             end
 
             S_FINISH: begin
-                if (count == 5'd31) begin //browse all blocks
+                if (count == 6'd32) begin //browse all blocks
                     state_nxt = S_IDLE;
                 end
-                else if(c_valid[count]) begin //valid = 1 means need to write back
+                else if(c_valid[count[4:0]]) begin //valid = 1 means need to write back
                     state_nxt = S_WB;
                 end
                 else begin
@@ -857,8 +859,8 @@ module Cache#(
     end
     //counter for finish
     always @(posedge i_clk) begin
-        if(state == S_FINISH) count <= count + 5'd1;
-        else count <= 5'd0;
+        if(state == S_FINISH) count <= count + 6'd1;
+        else count <= 6'd0;
     end
 
     //Combinational part
