@@ -100,7 +100,7 @@ module CHIP #(                                                                  
     assign mul_valid = mul_valid_reg;
     //assignment for finish
     // assign o_finish = Isecall;
-    assign o_finish = (i_cache_finish)?1:0;
+    assign o_finish = (i_cache_finish)? 1 : 0;
     assign o_proc_finish = Isecall;
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
 // Submoddules
@@ -735,9 +735,9 @@ module Cache#(
     // In normal WB, data = old block; In finish WB, data = all block indexed by [4:0
     assign o_mem_wdata = (i_proc_finish) ? c_data[count[4:0]] : c_data[i_index];
     // In S_Read, read data is cache data if hit
-    assign o_proc_rdata = (c_valid[i_index] && hit) ? c_data[i_index][offset] : 32'b0;
-    assign o_proc_stall = (state != S_IDLE) ? 1:0;
-    assign o_proc_finish = (count == 6'd32) ? 1:0;
+    assign o_proc_rdata = (c_valid[i_index] && hit) ? c_data_sep[offset] : 32'b0;
+    assign o_proc_stall = (state_nxt != S_IDLE) ? 1:0;
+    assign o_cache_finish = (count == 6'd32) ? 1:0;
     //------------------------------------------//
     assign i_tag = i_proc_addr[31:9];
     assign i_index = i_proc_addr[8:4];
@@ -816,17 +816,17 @@ module Cache#(
             end
 
             S_WB : begin
-                state_nxt = S_WB;
+                //state_nxt = S_WB;
                 /* if(i_proc_wen && !i_mem_stall) begin
                     state_nxt = S_WRITE;
                 end */
-                if(!i_mem_stall && !c_dirty[i_index]) begin
-                    state_nxt = S_ALLO;
-                end
-                else if(!i_mem_stall && i_proc_finish) begin //Assume i_proc_finish would always ON during ecall
+
+                if(!i_mem_stall && i_proc_finish) begin //Assume i_proc_finish would always ON during ecall
                     state_nxt = S_FINISH;
                 end
-
+                else if(!i_mem_stall && !c_dirty[i_index]) begin
+                    state_nxt = S_ALLO;
+                end
                 else begin
                     state_nxt = S_WB;
                 end
@@ -863,7 +863,13 @@ module Cache#(
     end
     //counter for finish
     always @(posedge i_clk) begin
-        if(state == S_FINISH) count <= count + 6'd1;
+        if(i_proc_finish) begin
+            if (state == S_FINISH) begin
+                count <= count + 6'd1;
+            end
+            else 
+                count <= count;
+        end
         else count <= 6'd0;
     end
 
