@@ -731,10 +731,10 @@ module Cache#(
     assign o_mem_cen = (state == S_ALLO || state == S_WB) ? 1 : 0;
     assign o_mem_wen = (state == S_WB) ? 1 : 0;
     // In normal WB, address = old block; In finish WB, address = all block indexed by count; Otherwire(In ALLO), address = new block
-    assign o_mem_addr = (state == S_WB)? ((i_proc_finish)? {c_tag[count[4:0]], i_proc_addr[8:0]} : {c_tag[i_index], i_proc_addr[8:0]}) : i_proc_addr;
-    // In normal WB, data = old block; In finish WB, data = all block indexed by [4:0
+    assign o_mem_addr = (state == S_WB)? ((i_proc_finish)? {c_tag[count[4:0]], count[4:0], 4'b0} : {c_tag[i_index], i_index, 4'b0}) : i_proc_addr;
+    // In normal WB, data = old block; In finish WB, data = all block indexed by count
     assign o_mem_wdata = (i_proc_finish) ? c_data[count[4:0]] : c_data[i_index];
-    // In S_Read, read data is cache data if hit
+    // In S_Read, read data is cache data if hit&valid
     assign o_proc_rdata = (c_valid[i_index] && hit) ? c_data_sep[offset] : 32'b0;
     assign o_proc_stall = (state_nxt != S_IDLE) ? 1:0;
     assign o_cache_finish = (count == 6'd32) ? 1:0;
