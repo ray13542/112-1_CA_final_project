@@ -719,7 +719,7 @@ module Cache#(
     parameter S_ALLO = 3'd4;
     parameter S_FINISH = 3'd5;
     reg [2:0] state, state_nxt;
-    reg [5:0] count;
+    reg [4:0] count;
 
     // (DONE) o_proc_stall: 0 if not S_IDLE
     // (DONE) i_proc_finish(To tell the cache to store all data back to the main memory) : when "ecall", output from chip
@@ -739,7 +739,7 @@ module Cache#(
     //assign o_proc_rdata = (c_valid[i_index] && hit) ? c_data[i_index][ADDR_W*offset +: ADDR_W] : 32'b0;
     assign o_proc_rdata = c_data[i_index][ADDR_W*offset +: ADDR_W];
     assign o_proc_stall = (state_nxt != S_IDLE) ? 1:0;
-    assign o_cache_finish = (count == 6'd32) ? 1:0;
+    assign o_cache_finish = (count == 5'd16) ? 1:0;
     //------------------------------------------//
     assign real_addr = i_proc_addr - i_offset;
     assign i_tag = real_addr[31:8];
@@ -884,7 +884,7 @@ module Cache#(
                 if (count == 6'd32 && !i_mem_stall) begin //browse all blocks
                     state_nxt = S_IDLE;
                 end
-                else if(c_dirty[count[4:0]]) begin //valid = 1 means need to write back
+                else if(c_dirty[count[3:0]]) begin //valid = 1 means need to write back
                     state_nxt = S_WB;
                 end
                 else begin
@@ -900,11 +900,11 @@ module Cache#(
     always @(posedge i_clk) begin
         if(i_proc_finish) begin
             if (state == S_FINISH && !c_dirty[i_index]) begin
-                count <= count + 6'd1;
+                count <= count + 1;
             end
             else 
                 count <= count;
         end
-        else count <= 6'd0;
+        else count <= 0;
     end
 endmodule
