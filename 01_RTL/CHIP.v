@@ -881,7 +881,7 @@ module Cache#(
             end
 
             S_FINISH: begin
-                if (count == 6'd32 && !i_mem_stall) begin //browse all blocks
+                if (count == 5'd16 && !i_mem_stall) begin //browse all blocks
                     state_nxt = S_IDLE;
                 end
                 else if(c_dirty[count[3:0]]) begin //valid = 1 means need to write back
