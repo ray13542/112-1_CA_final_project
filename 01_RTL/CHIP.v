@@ -696,17 +696,17 @@ module Cache#(
         // others
             input [ADDR_W-1: 0] i_offset
     );
-    parameter BLOCK = 32;
+    parameter BLOCK = 16; // 32->16
     //store
     reg [4*BIT_W-1:0] c_data [BLOCK-1:0];
     //wire [BIT_W-1:0] c_data_sep [3:0];
-    reg [22:0] c_tag [BLOCK-1:0];
+    reg [23:0] c_tag [BLOCK-1:0];
     reg c_valid [BLOCK-1:0];
     reg c_dirty [BLOCK-1:0];
     //address
     wire [ADDR_W-1:0] real_addr;
-    wire [22:0] i_tag;
-    wire [4:0] i_index;
+    wire [23:0] i_tag;
+    wire [3:0] i_index;
     wire [1:0] offset;
     //control
     wire tag_eq;
@@ -742,8 +742,8 @@ module Cache#(
     assign o_cache_finish = (count == 6'd32) ? 1:0;
     //------------------------------------------//
     assign real_addr = i_proc_addr - i_offset;
-    assign i_tag = real_addr[31:9];
-    assign i_index = (i_proc_finish)? count[4:0] : real_addr[8:4];
+    assign i_tag = real_addr[31:8];
+    assign i_index = (i_proc_finish)? count[3:0] : real_addr[7:4];
     assign offset = real_addr[3:2];
     assign hit = tag_eq & c_valid[i_index];
     assign tag_eq = (i_tag == c_tag[i_index]) ? 1: 0;
@@ -879,30 +879,66 @@ module Cache#(
     //Combinational part
     //valid & dirty
     always @(*) begin
+        // for (i = 0; i < BLOCK ; i = i + 1) begin
+        //         c_tag[i] = 0;
+        //         c_valid[i] = 0;
+        //         c_data[i] = 0;
+        //         c_dirty[i] = 0;
+        // end
+        // c_tag[i_index] = c_tag[i_index];
+        // c_valid[i_index] = c_valid[i_index];
+        // c_data[i_index] = c_data[i_index];
         case (state)
             S_WRITE:begin
+                c_tag[i_index] = c_tag[i_index];
+                c_valid[i_index] = c_valid[i_index];
+                c_data[i_index] = c_data[i_index];
+                c_dirty[i_index] = c_dirty[i_index];
                 if(hit)begin
                     c_dirty[i_index] = 1;
                     //write back data to chip if hit
                     c_data[i_index][ADDR_W*offset +: ADDR_W] = i_proc_wdata;
+                    c_tag[i_index] = c_tag[i_index];
+                    c_valid[i_index] = c_valid[i_index];
+                end
+                else begin
+                    c_dirty[i_index] = c_dirty[i_index];
+                    c_data[i_index] = c_data[i_index];
+                    c_tag[i_index] = c_tag[i_index];
+                    c_valid[i_index] = c_valid[i_index];
                 end
             end
             S_READ:begin
-                //Assignment of data & addr are in the assignment part 
+                //Assignment of data & addr are in the assignment part
+                c_tag[i_index] = c_tag[i_index];
+                c_valid[i_index] = c_valid[i_index];
+                c_data[i_index] = c_data[i_index];
+                c_dirty[i_index] = c_dirty[i_index];
             end
             S_WB:begin
                 c_dirty[i_index] = 0;
+                c_tag[i_index] = c_tag[i_index];
+                c_valid[i_index] = c_valid[i_index];
+                c_data[i_index] = c_data[i_index];
             end
             S_ALLO:begin
                 c_tag[i_index] = i_tag;
                 c_valid[i_index] = 1;
                 c_data[i_index] = i_mem_rdata;
+                c_dirty[i_index] = c_dirty[i_index]; //
             end
             S_FINISH:begin
                 //Assignment of data & addr are in the assignment part 
+                c_tag[i_index] = c_tag[i_index];
+                c_valid[i_index] = c_valid[i_index];
+                c_data[i_index] = c_data[i_index];
+                c_dirty[i_index] = c_dirty[i_index];
             end
             default: begin
-
+                c_tag[i_index] = c_tag[i_index];
+                c_valid[i_index] = c_valid[i_index];
+                c_data[i_index] = c_data[i_index];
+                c_dirty[i_index] = c_dirty[i_index];
             end
         endcase
     end
